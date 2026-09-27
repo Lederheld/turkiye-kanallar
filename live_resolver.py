@@ -186,7 +186,7 @@ class RedirectHandler(BaseHTTPRequestHandler):
         with cache_lock:
             cached = link_cache.get(slug)
         if cached is None:
-            self.send_error(HTTP_STATUS_NOT_READY, "Link henüz hazır değil")
+            self.send_error(HTTP_STATUS_NOT_READY, "Link not ready yet")  # HTTP durum satırı latin-1 olmalı
             return
         self.send_response(HTTP_STATUS_REDIRECT)
         self.send_header("Location", cached.url)
