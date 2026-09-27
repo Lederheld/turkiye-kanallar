@@ -210,8 +210,12 @@ GEO_BLOCK_ERROR_MARKERS = ("403", "Invalid data found")
 PUBLISH_MIN_RETAINED_RATIO = 0.7
 # Süreli linkli kanallar live_resolver.py üzerinden (Mac açıkken) verilir
 RESOLVER_BASE_URL = os.environ.get("RESOLVER_BASE_URL", "").rstrip("/")   # ör. http://192.168.1.121:8765
-RESOLVER_SLUG_BY_CHANNEL = {"DMAX": "dmax", "TLC": "tlc", "Beyaz TV": "beyaztv", "CNN Türk": "cnnturk"}
+RESOLVER_SLUG_BY_CHANNEL = {"CNN Türk": "cnnturk"}   # token IP'ye bağlı → yalnızca Türkiye'deki Mac alabilir
 STATUS_VIA_RESOLVER = "yönlendirici (Mac açıkken)"
+# Süreli ama IP'ye bağlı olmayan linkler: refresh_tokens.py (GitHub, 30 dk'da bir) gist'te günceller.
+# Bu build onlara dokunmaz, gist'teki mevcut satırlarını aynen taşır.
+CI_REFRESHED_CHANNELS = ("DMAX", "TLC", "Beyaz TV")
+STATUS_CI_REFRESHED = "süreli, GitHub 30 dk'da bir yeniliyor"
 STATUS_ADDED = "eklendi"
 STATUS_EXPIRING = "süreli"
 STATUS_NO_OFFICIAL_SOURCE = "resmi kaynak yok"
@@ -783,6 +787,7 @@ def main() -> int:
         keep_geo_blocked_channels(results, stored_gist_id)
 
     missing_specs = [result.spec for result in results if result.chosen is None
+                     and result.spec.display_name not in CI_REFRESHED_CHANNELS
                      and not (RESOLVER_BASE_URL and result.spec.display_name in RESOLVER_SLUG_BY_CHANNEL)]
     if missing_specs and not arguments.no_browser:
         log(f"Resmi sitelerden {len(missing_specs)} kanal taranıyor…")
@@ -800,6 +805,15 @@ def main() -> int:
 
     if arguments.keep_geo_blocked and stored_gist_id:
         keep_geo_blocked_channels(results, stored_gist_id)  # ikinci testte düşenler için
+
+    if stored_gist_id:
+        previous_urls = load_previous_gist_entries(stored_gist_id)
+        for result in results:
+            carried_url = previous_urls.get(result.spec.display_name)
+            if result.chosen is None and result.spec.display_name in CI_REFRESHED_CHANNELS and carried_url:
+                result.chosen = StreamCandidate(url=carried_url, source_label="refresh_tokens",
+                                                source_priority=SOURCE_PRIORITY_OFFICIAL_PAGE)
+                result.status = STATUS_CI_REFRESHED
 
     if RESOLVER_BASE_URL:
         for result in results:

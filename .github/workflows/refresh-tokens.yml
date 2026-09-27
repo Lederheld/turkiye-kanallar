@@ -1,0 +1,44 @@
+# 30 dakikada bir: DMAX, TLC ve Beyaz TV'nin kısa ömürlü resmi linklerini gist'te tazeler.
+# (Bu linkler IP'ye bağlı değil; CNN Türk'ünkü bağlı olduğu için Mac yönlendiricisinde kalır.)
+name: Refresh short-lived links
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"   # yoğun olan tam/yarım saat başlarından kaçınır
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gist-write            # ana playlist workflow'u ile aynı anda gist'e yazmasın
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Refresh links in gist
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+        run: python refresh_tokens.py --gist-id "$GIST_ID"

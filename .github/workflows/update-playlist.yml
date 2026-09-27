@@ -17,7 +17,7 @@ permissions:
   contents: write   # yalnızca keepalive commit'i için
 
 concurrency:
-  group: update-playlist
+  group: gist-write            # refresh-tokens workflow'u ile aynı anda gist'e yazmasın
   cancel-in-progress: false
 
 env:
