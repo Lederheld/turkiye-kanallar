@@ -7,3 +7,9 @@ Resmi ve ücretsiz Türk TV yayınlarından M3U listesi üretir ve secret bir gi
 - Kanal bazında son durum: workflow çıktısındaki `rapor` artifact'ı
 
 Gerekli secret'lar: `GIST_TOKEN` (yalnızca gist yetkili token), `GIST_ID`.
+
+## Süreli linkli kanallar
+- DMAX, TLC, Beyaz TV: `refresh_tokens.py` (workflow: `refresh-tokens.yml`) linkleri gist'te tazeler.
+  GitHub'ın kendi zamanlayıcısı güvenilir tetiklemediği için cron-job.org 30 dk'da bir
+  `workflow_dispatch` çağırır (yalnızca bu repoda Actions: Read and write yetkili fine-grained token).
+- CNN Türk: token IP'ye bağlı; `live_resolver.py` Türkiye'deki bir Mac'te çalışırken açılır.
