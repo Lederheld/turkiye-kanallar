@@ -1,19 +1,31 @@
-# Günlük: kaynakları yeniden çek, linkleri test et, ölenleri çıkar, gist'i güncelle.
+# Günde iki kez: kaynakları yeniden çek, linkleri test et, ölenleri çıkar, gist'i güncelle.
 # Token yenileme YAPILMAZ; süreli linkler listeye hiç girmez.
 #
-# Gerekli repo ayarları:
-#   secrets.GIST_TOKEN : yalnızca "gist" yetkili bir GitHub token (classic PAT, scope: gist)
-#   vars.GIST_ID       : güncellenecek gist id
-name: Update Turkish TV playlist (daily)
+# Gerekli repo secret'ları (public repo: loglar herkese açık, bu yüzden ikisi de secret):
+#   GIST_TOKEN : yalnızca "gist" yetkili GitHub token
+#   GIST_ID    : güncellenecek gist'in id'si
+name: Update Turkish TV playlist
 
 on:
   schedule:
-    - cron: "30 3 * * *"   # her gün 03:30 UTC (06:30 TR)
+    # Tam saat başları GitHub'da en yoğun anlar (gecikme/atlanma riski) → :30'da çalışır
+    - cron: "30 3 * * *"    # 06:30 TR
+    - cron: "30 15 * * *"   # 18:30 TR
   workflow_dispatch:
+
+permissions:
+  contents: write   # yalnızca keepalive commit'i için
+
+concurrency:
+  group: update-playlist
+  cancel-in-progress: false
+
+env:
+  KEEPALIVE_AFTER_DAYS: 45   # GitHub, 60 gün commit olmayan repoda zamanlanmış workflow'u kapatır
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # "latest" etiketinin sürüm değişikliklerinden etkilenmemek için sabit
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +33,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -33,14 +46,28 @@ jobs:
       - name: Build and publish playlist
         env:
           GH_TOKEN: ${{ secrets.GIST_TOKEN }}
-        # Runner ABD'de: geo-kısıtlı (403) kanallar önceki listeden korunur
-        run: python build_playlist.py --publish --gist-id "${{ vars.GIST_ID }}" --keep-geo-blocked
+          GIST_ID: ${{ secrets.GIST_ID }}
+        # Runner ABD'de: geo-kısıtlı (403) ya da geçici hata veren kanallar, önceki listedeki
+        # link hâlâ uygunsa korunur; kanal sayısı %70'in altına düşerse gist hiç güncellenmez.
+        run: python build_playlist.py --publish --gist-id "$GIST_ID" --keep-geo-blocked
 
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rapor
-          path: |
-            rapor.md
-            turkiye-kanallar.m3u
+          path: rapor.md          # gist adresini içermez (CI'da yazılmaz)
+          retention-days: 7
+
+      - name: Keep scheduled workflow alive
+        run: |
+          last_commit_epoch=$(git log -1 --format=%ct)
+          age_days=$(( ( $(date +%s) - last_commit_epoch ) / 86400 ))
+          if [ "$age_days" -ge "$KEEPALIVE_AFTER_DAYS" ]; then
+            date -u +%Y-%m-%dT%H:%M:%SZ > .github/keepalive
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .github/keepalive
+            git commit -m "keepalive ($age_days gün commit yoktu)"
+            git push
+          fi

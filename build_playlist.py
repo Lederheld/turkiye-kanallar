@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import ipaddress
+import os
 import json
 import re
 import subprocess
@@ -35,6 +36,8 @@ OUTPUT_PLAYLIST_NAME = "turkiye-kanallar.m3u"
 OUTPUT_PLAYLIST_PATH = PROJECT_DIR / OUTPUT_PLAYLIST_NAME
 OUTPUT_REPORT_PATH = PROJECT_DIR / "rapor.md"
 GIST_ID_STATE_PATH = PROJECT_DIR / ".gist_id"
+# Public repo'da Actions logları herkese açık: gist id/URL'si CI'da asla yazdırılmaz
+RUNNING_IN_CI = os.environ.get("GITHUB_ACTIONS") == "true"
 GIST_DESCRIPTION = "Türkiye TV kanalları (resmi ücretsiz kaynaklar)"
 
 IPTV_ORG_TR_M3U_URL = "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tr.m3u"
@@ -669,7 +672,7 @@ def write_report(results: list[ChannelResult], raw_url: str | None) -> None:
     for result in results:
         if result.rejected_notes and result.status != STATUS_ADDED:
             lines.append(f"- **{result.spec.display_name}**: " + "; ".join(dict.fromkeys(result.rejected_notes)))
-    if raw_url:
+    if raw_url and not RUNNING_IN_CI:
         lines += ["", f"Gist raw URL: {raw_url}"]
     OUTPUT_REPORT_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -678,7 +681,11 @@ def write_report(results: list[ChannelResult], raw_url: str | None) -> None:
 # Gist
 # ---------------------------------------------------------------------------
 def run_gh(arguments: list[str], stdin_text: str | None = None) -> str:
-    return subprocess.run(["gh", *arguments], input=stdin_text, capture_output=True, text=True, check=True).stdout.strip()
+    completed = subprocess.run(["gh", *arguments], input=stdin_text, capture_output=True, text=True)
+    if completed.returncode != 0:
+        # komut satırı gist id içerdiği için hatada yalnızca gh'nin mesajı gösterilir
+        raise RuntimeError(f"gh {arguments[0]} başarısız: {completed.stderr.strip()[-200:]}")
+    return completed.stdout.strip()
 
 
 def publish_gist(explicit_gist_id: str | None) -> str:
@@ -690,11 +697,11 @@ def publish_gist(explicit_gist_id: str | None) -> str:
     }
     if gist_id:
         run_gh(["api", "-X", "PATCH", f"gists/{gist_id}", "--input", "-", "--jq", ".id"], json.dumps(payload))
-        log(f"Gist güncellendi: {gist_id}")
+        log("Gist güncellendi" if RUNNING_IN_CI else f"Gist güncellendi: {gist_id}")
     else:
         payload["public"] = False
         gist_id = run_gh(["api", "-X", "POST", "gists", "--input", "-", "--jq", ".id"], json.dumps(payload))
-        log(f"Secret gist oluşturuldu: {gist_id}")
+        log("Secret gist oluşturuldu" if RUNNING_IN_CI else f"Secret gist oluşturuldu: {gist_id}")
     GIST_ID_STATE_PATH.write_text(gist_id + "\n")
     username = run_gh(["api", "user", "--jq", ".login"])
     return f"https://gist.githubusercontent.com/{username}/{gist_id}/raw/{OUTPUT_PLAYLIST_NAME}"
@@ -761,7 +768,7 @@ def main() -> int:
     write_report(results, raw_url)
 
     log(f"\n{added_count}/{len(results)} kanal eklendi → {OUTPUT_PLAYLIST_PATH.name}, rapor → {OUTPUT_REPORT_PATH.name}")
-    if raw_url:
+    if raw_url and not RUNNING_IN_CI:
         print(raw_url)
     return 0
 
