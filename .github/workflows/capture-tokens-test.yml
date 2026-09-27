@@ -1,0 +1,25 @@
+# Tek seferlik deneme: CI'da alınan süreli linkler Türkiye'de açılıyor mu, ne kadar yaşıyor?
+name: Capture tokens (test)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Playwright
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+      - name: Capture
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TOKEN_GIST_ID: ${{ secrets.TOKEN_GIST_ID }}
+        run: python capture_tokens.py
