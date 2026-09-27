@@ -174,6 +174,8 @@ CHANNEL_SPECS: list[ChannelSpec] = [
     ChannelSpec("TVNET", GROUP_NEWS, "TVNET.tr", ("tvnet.com.tr",), ("https://www.tvnet.com.tr/canli-yayin",)),
     ChannelSpec("Bloomberg HT", GROUP_NEWS, "BloombergHT.tr", ("bloomberght.com",), ("https://www.bloomberght.com/tv",)),
     ChannelSpec("Ekotürk", GROUP_NEWS, "Ekoturk.tr", ("ekoturk.com",), ("https://www.ekoturk.com/canli-yayin",)),
+    ChannelSpec("CNBC-e", GROUP_NEWS, "CNBCe.tr", ("cnbce.com",), ("https://www.cnbce.com/canli-yayin",)),
+    ChannelSpec("GZT", GROUP_NEWS, "GZT.tr", ("gzt.com",), ("https://www.gzt.com/canli-yayin",)),
     ChannelSpec("TRT World", GROUP_NEWS, "TRTWorld.tr", ("trt.com.tr", "trtworld.com"), ("https://www.trtworld.com/live",), ("TRT World",)),
     # Spor
     ChannelSpec("TRT Spor", GROUP_SPORTS, "TRTSpor.tr", ("trt.com.tr", "trtspor.com.tr"), ("https://www.trtspor.com.tr/canli-yayin-izle/trt-spor",), ("TRT Spor Ⓖ",)),
