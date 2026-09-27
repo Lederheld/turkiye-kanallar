@@ -141,6 +141,7 @@ class ChannelSpec:
     official_live_pages: tuple[str, ...] = ()     # Playwright ile açılacak resmi sayfalar
     free_tv_names: tuple[str, ...] = ()           # Free-TV tablosundaki ad
     known_official_urls: tuple[str, ...] = ()     # resmi siteden daha önce yakalanmış sabit linkler
+    rejected_url_patterns: tuple[str, ...] = ()   # yanlış yayın (ör. yurt dışı sürümü) linklerini ele
 
 
 CHANNEL_SPECS: list[ChannelSpec] = [
@@ -153,7 +154,8 @@ CHANNEL_SPECS: list[ChannelSpec] = [
                 known_official_urls=("https://dogus.daioncdn.net/startv/startv.m3u8?ce=3&app=a20ac41e-bdc3-4aa1-934d-26b484480ac9",)),
     ChannelSpec("NOW", GROUP_NATIONAL, "NOWTV.tr", ("nowtv.com.tr",), ("https://www.nowtv.com.tr/canli-yayin",)),
     ChannelSpec("TV8", GROUP_NATIONAL, "TV8.tr", ("tv8.com.tr",), ("https://www.tv8.com.tr/canli-yayin",)),
-    ChannelSpec("Kanal 7", GROUP_NATIONAL, "Kanal7.tr", ("kanal7.com",), ("https://www.kanal7.com/canli-izle",)),
+    ChannelSpec("Kanal 7", GROUP_NATIONAL, "Kanal7.tr", ("kanal7.com",), ("https://www.kanal7.com/canli-izle",),
+                rejected_url_patterns=("avr", "avrupa")),
     ChannelSpec("Beyaz TV", GROUP_NATIONAL, "BeyazTV.tr", ("beyaztv.com.tr",), ("https://beyaztv.com.tr/canli-yayin",)),
     ChannelSpec("360", GROUP_NATIONAL, "360.tr", ("tv360.com.tr",), ("https://www.tv360.com.tr/canli-yayin",)),
     ChannelSpec("Teve2", GROUP_NATIONAL, "", ("teve2.com.tr",), ("https://www.teve2.com.tr/canli-yayin",)),
@@ -202,7 +204,8 @@ CHANNEL_SPECS: list[ChannelSpec] = [
     ChannelSpec("Number1 TV", GROUP_MUSIC, "Number1TV.tr", ("numberone.com.tr",), ("https://www.numberone.com.tr/canli-yayin",)),
 ]
 
-GEO_BLOCK_ERROR_MARKER = "403"
+# Yurt dışından bakınca geo-engelin görünümleri: 403 ya da video yerine HTML/boş yanıt
+GEO_BLOCK_ERROR_MARKERS = ("403", "Invalid data found")
 # Gözetimsiz çalışmada: kanal sayısı öncekinin bu oranının altına düşerse gist güncellenmez
 PUBLISH_MIN_RETAINED_RATIO = 0.7
 # Süreli linkli kanallar live_resolver.py üzerinden (Mac açıkken) verilir
@@ -284,6 +287,11 @@ def host_rejection_reason(host: str, spec: ChannelSpec, captured_on_official_pag
     if captured_on_official_page:
         return None  # yayıncının kendi oynatıcısının kullandığı CDN
     return "beyaz listede değil"
+
+
+def is_rejected_feed(spec: ChannelSpec, url: str) -> bool:
+    lowered_path = urlparse(url).path.lower()
+    return any(pattern in lowered_path for pattern in spec.rejected_url_patterns)
 
 
 def is_expiring_url(url: str) -> bool:
@@ -544,6 +552,9 @@ def screen_candidates(spec: ChannelSpec, candidates: list[StreamCandidate], resu
         if candidate.url in seen_urls:
             continue
         seen_urls.add(candidate.url)
+        if is_rejected_feed(spec, candidate.url):
+            result.rejected_notes.append(f"{candidate.host}: yanlış yayın (kanal kuralı)")
+            continue
         captured_on_official_page = candidate.source_priority == SOURCE_PRIORITY_OFFICIAL_PAGE
         rejection = host_rejection_reason(candidate.host, spec, captured_on_official_page)
         if rejection:
@@ -627,7 +638,7 @@ def keep_geo_blocked_channels(results: list[ChannelResult], gist_id: str) -> Non
     candidate_by_result: dict[str, StreamCandidate] = {}
     for result in results:
         previous_url = previous_urls.get(result.spec.display_name)
-        if result.chosen or not previous_url:
+        if result.chosen or not previous_url or is_rejected_feed(result.spec, previous_url):
             continue
         if is_expiring_url(previous_url) and not has_stale_expiry(previous_url):
             continue
@@ -644,7 +655,7 @@ def keep_geo_blocked_channels(results: list[ChannelResult], gist_id: str) -> Non
         if previous_candidate is None:
             continue
         works, detail = outcomes[previous_candidate.url]
-        if works or GEO_BLOCK_ERROR_MARKER in detail:
+        if works or any(marker in detail for marker in GEO_BLOCK_ERROR_MARKERS):
             result.chosen, result.status = previous_candidate, STATUS_ADDED
             log(f"  önceki link korundu: {result.spec.display_name} ({'çalışıyor' if works else 'geo 403'})")
 
