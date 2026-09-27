@@ -9,8 +9,8 @@ name: Update Turkish TV playlist
 on:
   schedule:
     # Tam saat başları GitHub'da en yoğun anlar (gecikme/atlanma riski) → :30'da çalışır
-    - cron: "30 3 * * *"    # 06:30 TR
-    - cron: "30 15 * * *"   # 18:30 TR
+    - cron: "25 3 * * *"    # 06:25 TR
+    - cron: "25 15 * * *"   # 18:25 TR
   workflow_dispatch:
 
 permissions:

@@ -4,7 +4,7 @@ name: Refresh short-lived links
 
 on:
   schedule:
-    - cron: "17,47 * * * *"   # yoğun olan tam/yarım saat başlarından kaçınır
+    - cron: "7,37 * * * *"    # yoğun olan tam/yarım saat başlarından kaçınır
   workflow_dispatch:
 
 permissions:
