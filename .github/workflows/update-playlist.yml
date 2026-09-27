@@ -1,0 +1,46 @@
+# Günlük: kaynakları yeniden çek, linkleri test et, ölenleri çıkar, gist'i güncelle.
+# Token yenileme YAPILMAZ; süreli linkler listeye hiç girmez.
+#
+# Gerekli repo ayarları:
+#   secrets.GIST_TOKEN : yalnızca "gist" yetkili bir GitHub token (classic PAT, scope: gist)
+#   vars.GIST_ID       : güncellenecek gist id
+name: Update Turkish TV playlist (daily)
+
+on:
+  schedule:
+    - cron: "30 3 * * *"   # her gün 03:30 UTC (06:30 TR)
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Playwright
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Build and publish playlist
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+        # Runner ABD'de: geo-kısıtlı (403) kanallar önceki listeden korunur
+        run: python build_playlist.py --publish --gist-id "${{ vars.GIST_ID }}" --keep-geo-blocked
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapor
+          path: |
+            rapor.md
+            turkiye-kanallar.m3u

@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+build.log
+logs/
+.gist_id
+rapor.md
+turkiye-kanallar.m3u
