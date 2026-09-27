@@ -56,6 +56,8 @@ BROWSER_CHANNEL = "chrome"  # sistemdeki Google Chrome; yoksa Playwright Chromiu
 BROWSER_PAGE_LOAD_TIMEOUT_MS = 45_000
 BROWSER_PLAYER_READY_WAIT_SECONDS = 5
 BROWSER_CLICK_TIMEOUT_MS = 2_000
+BROWSER_ACTION_TIMEOUT_MS = 10_000          # tek bir tarayıcı işleminin üst sınırı
+BROWSER_TOTAL_BUDGET_SECONDS = 15 * 60     # tüm resmi site taramasının üst sınırı
 BROWSER_CAPTURE_WAIT_SECONDS = 25
 BROWSER_VIEWPORT = {"width": 1280, "height": 800}
 BROWSER_PLAYER_AREA_CLICK_POSITION = (640, 350)
@@ -389,7 +391,11 @@ def capture_m3u8_from_official_pages(specs: list[ChannelSpec]) -> dict[str, list
             browser = playwright.chromium.launch(channel=BROWSER_CHANNEL, headless=True)
         except Exception:
             browser = playwright.chromium.launch(headless=True)
+        capture_deadline = time.time() + BROWSER_TOTAL_BUDGET_SECONDS
         for spec in specs:
+            if time.time() > capture_deadline:
+                log(f"  ! tarama bütçesi doldu, {spec.display_name} ve sonrası atlandı")
+                break
             captured_urls: list[str] = []
             for page_url in spec.official_live_pages:
                 page_host = (urlparse(page_url).hostname or "").lower()
@@ -398,6 +404,7 @@ def capture_m3u8_from_official_pages(specs: list[ChannelSpec]) -> dict[str, list
                     continue
                 log(f"  → {spec.display_name}: {page_url}")
                 context = browser.new_context(user_agent=BROWSER_USER_AGENT, locale="tr-TR", viewport=BROWSER_VIEWPORT)
+                context.set_default_timeout(BROWSER_ACTION_TIMEOUT_MS)
                 page = context.new_page()
                 page.on("request", lambda request: captured_urls.append(request.url)
                         if ".m3u8" in request.url.lower() else None)
@@ -406,7 +413,7 @@ def capture_m3u8_from_official_pages(specs: list[ChannelSpec]) -> dict[str, list
                     page.wait_for_timeout(BROWSER_PLAYER_READY_WAIT_SECONDS * 1000)
                     click_play_buttons(page)
                     page.wait_for_timeout(BROWSER_CAPTURE_WAIT_SECONDS * 1000)
-                    captured_urls.extend(find_embedded_m3u8_urls(page))
+                    captured_urls.extend(find_embedded_m3u8_urls(page, spec))
                 except Exception as error:
                     log(f"    sayfa hatası: {type(error).__name__}")
                 finally:
@@ -426,9 +433,13 @@ def capture_m3u8_from_official_pages(specs: list[ChannelSpec]) -> dict[str, list
     return captured_by_channel
 
 
-def find_embedded_m3u8_urls(page) -> list[str]:
+def find_embedded_m3u8_urls(page, spec: ChannelSpec) -> list[str]:
+    """Yalnızca ana sayfa ve kanalın kendi domainindeki iframe'ler (reklam iframe'leri takılabiliyor)."""
     embedded_urls: list[str] = []
     for frame in page.frames:
+        frame_host = (urlparse(frame.url).hostname or "").lower()
+        if frame is not page.main_frame and not host_matches(frame_host, spec.owned_domains):
+            continue
         try:
             frame_html = frame.content()
         except Exception:
@@ -613,18 +624,29 @@ def load_previous_gist_entries(gist_id: str) -> dict[str, str]:
 def keep_geo_blocked_channels(results: list[ChannelResult], gist_id: str) -> None:
     """Yurt dışındaki CI'da 403 (geo) veren ama önceki listede olan kanalları koru."""
     previous_urls = load_previous_gist_entries(gist_id)
+    candidate_by_result: dict[str, StreamCandidate] = {}
     for result in results:
         previous_url = previous_urls.get(result.spec.display_name)
-        if result.chosen or not previous_url or is_expiring_url(previous_url):
+        if result.chosen or not previous_url:
             continue
-        previous_candidate = StreamCandidate(url=previous_url, source_label="önceki liste (geo)",
-                                             source_priority=SOURCE_PRIORITY_IPTV_ORG)
-        if host_rejection_reason(previous_candidate.host, result.spec, captured_on_official_page=False):
+        if is_expiring_url(previous_url) and not has_stale_expiry(previous_url):
             continue
-        works, detail = verify_candidate(previous_candidate)
+        previous_candidate = StreamCandidate(url=previous_url, source_label="önceki liste",
+                                             source_priority=SOURCE_PRIORITY_IPTV_ORG,
+                                             has_stale_signature=has_stale_expiry(previous_url))
+        # önceki liste zaten elenmişti; yine de çıplak IP/şüpheli host (ör. yönlendirici adresi) alınmaz
+        if host_rejection_reason(previous_candidate.host, result.spec, captured_on_official_page=True):
+            continue
+        candidate_by_result[result.spec.display_name] = previous_candidate
+    outcomes = verify_in_parallel(list(candidate_by_result.values()))
+    for result in results:
+        previous_candidate = candidate_by_result.get(result.spec.display_name)
+        if previous_candidate is None:
+            continue
+        works, detail = outcomes[previous_candidate.url]
         if works or GEO_BLOCK_ERROR_MARKER in detail:
             result.chosen, result.status = previous_candidate, STATUS_ADDED
-            log(f"  geo koruması: {result.spec.display_name} tutuldu ({detail})")
+            log(f"  önceki link korundu: {result.spec.display_name} ({'çalışıyor' if works else 'geo 403'})")
 
 
 # ---------------------------------------------------------------------------
@@ -744,11 +766,18 @@ def main() -> int:
     }
     resolve_channels(results, list_candidates)
 
-    missing_specs = [result.spec for result in results if result.chosen is None]
+    stored_gist_id = arguments.gist_id or (GIST_ID_STATE_PATH.read_text().strip() if GIST_ID_STATE_PATH.exists() else "")
+    if arguments.keep_geo_blocked and stored_gist_id:
+        # ABD'deki CI'da geo-kısıtlı kanallar için gereksiz tarayıcı taramasını önler
+        keep_geo_blocked_channels(results, stored_gist_id)
+
+    missing_specs = [result.spec for result in results if result.chosen is None
+                     and not (RESOLVER_BASE_URL and result.spec.display_name in RESOLVER_SLUG_BY_CHANNEL)]
     if missing_specs and not arguments.no_browser:
         log(f"Resmi sitelerden {len(missing_specs)} kanal taranıyor…")
         captured = capture_m3u8_from_official_pages(missing_specs)
-        missing_results = [result for result in results if result.chosen is None]
+        missing_spec_names = {spec.display_name for spec in missing_specs}
+        missing_results = [result for result in results if result.spec.display_name in missing_spec_names]
         status_before_capture = {result.spec.display_name: result.status for result in missing_results}
         resolve_channels(missing_results, captured)
         for result in missing_results:  # sayfada hiçbir şey bulunamadıysa önceki (liste) durumunu koru
@@ -758,9 +787,8 @@ def main() -> int:
     if not arguments.no_recheck:
         recheck_chosen(results)
 
-    stored_gist_id = arguments.gist_id or (GIST_ID_STATE_PATH.read_text().strip() if GIST_ID_STATE_PATH.exists() else "")
     if arguments.keep_geo_blocked and stored_gist_id:
-        keep_geo_blocked_channels(results, stored_gist_id)
+        keep_geo_blocked_channels(results, stored_gist_id)  # ikinci testte düşenler için
 
     if RESOLVER_BASE_URL:
         for result in results:
