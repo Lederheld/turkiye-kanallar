@@ -203,6 +203,10 @@ CHANNEL_SPECS: list[ChannelSpec] = [
 GEO_BLOCK_ERROR_MARKER = "403"
 # Gözetimsiz çalışmada: kanal sayısı öncekinin bu oranının altına düşerse gist güncellenmez
 PUBLISH_MIN_RETAINED_RATIO = 0.7
+# Süreli linkli kanallar live_resolver.py üzerinden (Mac açıkken) verilir
+RESOLVER_BASE_URL = os.environ.get("RESOLVER_BASE_URL", "").rstrip("/")   # ör. http://192.168.1.121:8765
+RESOLVER_SLUG_BY_CHANNEL = {"DMAX": "dmax", "TLC": "tlc", "Beyaz TV": "beyaztv", "CNN Türk": "cnnturk"}
+STATUS_VIA_RESOLVER = "yönlendirici (Mac açıkken)"
 STATUS_ADDED = "eklendi"
 STATUS_EXPIRING = "süreli"
 STATUS_NO_OFFICIAL_SOURCE = "resmi kaynak yok"
@@ -757,6 +761,14 @@ def main() -> int:
     stored_gist_id = arguments.gist_id or (GIST_ID_STATE_PATH.read_text().strip() if GIST_ID_STATE_PATH.exists() else "")
     if arguments.keep_geo_blocked and stored_gist_id:
         keep_geo_blocked_channels(results, stored_gist_id)
+
+    if RESOLVER_BASE_URL:
+        for result in results:
+            slug = RESOLVER_SLUG_BY_CHANNEL.get(result.spec.display_name)
+            if slug and result.chosen is None:
+                result.chosen = StreamCandidate(url=f"{RESOLVER_BASE_URL}/{slug}.m3u8", source_label="live_resolver",
+                                                source_priority=SOURCE_PRIORITY_OFFICIAL_PAGE)
+                result.status = STATUS_VIA_RESOLVER
 
     write_playlist(results)
     added_count = sum(result.status == STATUS_ADDED for result in results)

@@ -47,6 +47,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GIST_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
+          RESOLVER_BASE_URL: ${{ vars.RESOLVER_BASE_URL }}
         # Runner ABD'de: geo-kısıtlı (403) ya da geçici hata veren kanallar, önceki listedeki
         # link hâlâ uygunsa korunur; kanal sayısı %70'in altına düşerse gist hiç güncellenmez.
         run: python build_playlist.py --publish --gist-id "$GIST_ID" --keep-geo-blocked
