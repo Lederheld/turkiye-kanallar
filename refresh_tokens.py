@@ -28,6 +28,7 @@ from build_playlist import (
 from live_resolver import RESOLVED_CHANNELS, capture_master_playlist, link_responds
 
 PLAYLIST_HEADER = "#EXTM3U"
+MAX_CAPTURE_ATTEMPTS = 2   # oynatıcı ilk denemede başlamayabiliyor
 TVG_NAME_PATTERN = re.compile(r'tvg-name="([^"]*)"')
 
 
@@ -40,8 +41,13 @@ def capture_fresh_urls() -> dict[str, str]:
         for channel in RESOLVED_CHANNELS:
             if channel.display_name not in CI_REFRESHED_CHANNELS:
                 continue
-            url = capture_master_playlist(browser, channel)
-            if url and link_responds(url):
+            url = None
+            for _ in range(MAX_CAPTURE_ATTEMPTS):
+                url = capture_master_playlist(browser, channel)
+                if url and link_responds(url):
+                    break
+                url = None
+            if url:
                 fresh_url_by_name[channel.display_name] = url
                 log(f"{channel.display_name}: taze link alındı")
             else:
