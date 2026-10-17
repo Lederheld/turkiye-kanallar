@@ -3,21 +3,19 @@ import SwiftUI
 struct ChannelLogo: View {
     let channel: Channel
     var padding: CGFloat = 26
+    @ObservedObject private var cache = LogoCache.shared
 
     var body: some View {
         ZStack {
             LinearGradient(colors: [.white, Color(white: 0.9)], startPoint: .top, endPoint: .bottom)
-            if let logoURL = channel.logoURL {
-                AsyncImage(url: logoURL) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFit().padding(padding)
-                    } else {
-                        initials
-                    }
-                }
+            if let logoURL = channel.logoURL, let image = cache.image(for: logoURL) {
+                Image(uiImage: image).resizable().scaledToFit().padding(padding)
             } else {
                 initials
             }
+        }
+        .onAppear {
+            if let logoURL = channel.logoURL { cache.load(logoURL) }
         }
     }
 

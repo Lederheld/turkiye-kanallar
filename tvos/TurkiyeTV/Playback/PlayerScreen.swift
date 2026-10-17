@@ -48,9 +48,12 @@ struct PlayerScreen: View {
                 }
             }
             .overlay {
-                if playback.isTransportBarVisible && playback.canRewind {
+                // Kaydırma başladığında AVKit'in çubuğu ~1 sn sonra açılıyor; o arada aynı yerde onun yerini tutan
+                // ince bir çizgi çizilir, çubuk açılınca çekilir (üst üste iki çubuk olmaz)
+                if playback.canRewind && (playback.isTransportBarVisible || playback.swipeTargetBehind != nil) {
                     ProgramSegments(programs: guide.programs(for: playback.channel), window: playback.rewindWindow,
-                                    highlightedAt: playback.swipeTargetBehind.map { Date().addingTimeInterval(-$0) })
+                                    highlightedAt: playback.swipeTargetBehind.map { Date().addingTimeInterval(-$0) },
+                                    placeholderPlayhead: playback.isTransportBarVisible ? nil : playback.behindLive)
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
@@ -206,6 +209,8 @@ private struct ProgramSegments: View {
     let programs: [TVProgram]
     let window: TimeInterval
     let highlightedAt: Date?
+    /// AVKit'in çubuğu henüz açılmadıysa onun yerine çizilecek çubuğun oynatma konumu (canlının gerisi).
+    let placeholderPlayhead: TimeInterval?
 
     var body: some View {
         GeometryReader { geometry in
@@ -217,6 +222,17 @@ private struct ProgramSegments: View {
                 TransportBarGeometry.x(behind: now.timeIntervalSince(date), window: window, width: size.width)
             }
             ZStack(alignment: .topLeading) {
+                if let placeholderPlayhead {
+                    let left = size.width * TransportBarGeometry.start
+                    let right = size.width * TransportBarGeometry.end
+                    let playhead = x(now.addingTimeInterval(-placeholderPlayhead))
+                    Capsule().fill(.white.opacity(0.3))
+                        .frame(width: right - left, height: 10)
+                        .position(x: (left + right) / 2, y: y)
+                    Capsule().fill(.white.opacity(0.75))
+                        .frame(width: max(playhead - left, 10), height: 10)
+                        .position(x: (left + playhead) / 2, y: y)
+                }
                 ForEach(programs.filter { $0.start > windowStart && $0.start < now }, id: \.start) { program in
                     Rectangle()
                         .fill(.black.opacity(0.85))
@@ -266,9 +282,11 @@ private struct SwipeTargetMarker: View {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(targetBehind < 30 ? "Canlı" : ProgramText.clock(Date().addingTimeInterval(-targetBehind)))
                             .font(.title2.weight(.bold).monospacedDigit())
-                        Text((offset < 0 ? "−" : "+") + DurationText.short(abs(offset)))
-                            .font(.callout.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.secondary)
+                        if abs(offset) >= 60 {
+                            Text((offset < 0 ? "−" : "+") + DurationText.short(abs(offset)))
+                                .font(.callout.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     if let program {
                         Text(program.title)

@@ -24,6 +24,13 @@ enum StreamSources {
         }
     }
 
+    /// Açılışta imzalı linkleri önceden al: kanal açılırken token beklenmesin.
+    static func prefetchSignedLinks() async {
+        for signed in SignedStream.byChannelName.values {
+            _ = await signed.resolve()
+        }
+    }
+
     /// Bir sonraki denemede imzalı linkler yeniden alınsın.
     static func invalidateSignedLinks() async {
         for signed in SignedStream.byChannelName.values {

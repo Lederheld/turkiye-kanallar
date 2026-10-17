@@ -21,8 +21,10 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
   Kartlarda ve kanal bilgisinde o an yayındaki program; sararken hedefteki program; Zaman Tüneli menüsünde
   programların başlangıçları; oynatma çubuğunda **Baştan izle**. Canlının gerisindeyken sağ üstteki
   rozet birkaç saniye sonra küçük bir baloncuğa dönüşür
+- **Hız:** kanal, liste tazelenmesini beklemeden eldeki linkle açılır (liste arka planda yenilenir);
+  logolar ve ATV'nin imzalı linki açılışta önceden alınır, logolar bellekte tutulur
 - **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →
-  listedeki link → tek kaliteli linkin ana playlist'i). Yayın 10 sn açılmazsa ya da donarsa sıradakine
+  listedeki link → tek kaliteli linkin ana playlist'i). Yayın açılışta 6 sn içinde başlamazsa ya da sonradan 10 sn donarsa sıradakine
   geçilir; hepsi biterse liste yenilenip bir tur daha denenir. ATV, listedeki sorunlu CDN yerine
   atv.com.tr'nin token servisinden Apple TV'nin kendisi için alınan linkle oynar
 - **Kişiselleştirme:** izleme süresi kanal başına tutulur (iki haftada yarıya iner); en çok izlenen

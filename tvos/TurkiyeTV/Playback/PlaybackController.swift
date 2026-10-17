@@ -28,7 +28,9 @@ final class PlaybackController: ObservableObject {
     private var healthTask: Task<Void, Never>?
     private var sources: [StreamSources.Source] = []
     private var sourceIndex = 0
-    /// Bu kadar süre görüntü gelmezse (açılışta ya da yayın ortasında) sıradaki kaynağa geçilir.
+    /// Açılışta bu kadar sürede görüntü gelmezse sıradaki kaynağa geçilir; yayın ortasındaki donmalar
+    /// için daha uzun beklenir (kısa ağ dalgalanmalarında kaynak değiştirmemek için).
+    private static let startStallLimit: TimeInterval = 6
     private static let stallLimit: TimeInterval = 10
     private static let healthCheckInterval: TimeInterval = 2
     private var timeObserver: Any?
@@ -155,6 +157,7 @@ final class PlaybackController: ObservableObject {
     private var swipeStartBehind: TimeInterval = 0
     private var swipeCommitTask: Task<Void, Never>?
     private static let swipeCommitDelay: Duration = .milliseconds(700)
+    private static let liveSnapDistance: TimeInterval = 60
 
     func beginSwipeSeek() {
         guard canRewind else { return }
@@ -167,7 +170,9 @@ final class PlaybackController: ObservableObject {
     func updateSwipeSeek(points: Double) {
         guard canRewind else { return }
         let distance = Self.swipeDistance(points) * SwipeSpeed.current.multiplier
-        swipeTargetBehind = min(max(swipeStartBehind - distance, 0), rewindWindow)
+        let target = min(max(swipeStartBehind - distance, 0), rewindWindow)
+        // Sağ uca yakınsa canlıya yapışır
+        swipeTargetBehind = target < max(Self.liveSnapDistance, rewindWindow * 0.015) ? 0 : target
     }
 
     func endSwipeSeek() {
@@ -260,7 +265,9 @@ final class PlaybackController: ObservableObject {
             if forceReload {
                 await store.reload()
             } else {
-                await store.reloadIfStale()
+                // Liste eskiyse arka planda tazelenir; kanal beklemeden eldeki linkle açılır.
+                // Link ölmüşse hata yolu listeyi zorla yenileyip tekrar dener.
+                Task { await store.reloadIfStale() }
             }
             guard !Task.isCancelled else { return }
             if let fresh = store.channel(named: channel.name) {
@@ -306,6 +313,7 @@ final class PlaybackController: ObservableObject {
         healthTask?.cancel()
         healthTask = Task { [weak self] in
             var stalled: TimeInterval = 0
+            var hasStarted = false
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Self.healthCheckInterval))
                 guard let self, !Task.isCancelled, self.isCurrentItem(itemID) else { return }
@@ -313,8 +321,9 @@ final class PlaybackController: ObservableObject {
                     stalled += Self.healthCheckInterval
                 } else {
                     stalled = 0
+                    hasStarted = hasStarted || self.player.timeControlStatus == .playing
                 }
-                if stalled >= Self.stallLimit {
+                if stalled >= (hasStarted ? Self.stallLimit : Self.startStallLimit) {
                     self.handleFailure(nil, itemID: itemID)
                     return
                 }

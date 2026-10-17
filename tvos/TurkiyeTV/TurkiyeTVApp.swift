@@ -19,7 +19,12 @@ struct TurkiyeTVApp: App {
                 .environmentObject(guide)
                 .preferredColorScheme(.dark)
                 .task {
+                    // Önbellekteki listeyle hemen: logolar ve imzalı linkler (ATV) kanal açılmadan hazır olsun
+                    async let logos: Void = LogoCache.shared.prefetch(store.channels.compactMap(\.logoURL))
+                    async let signed: Void = StreamSources.prefetchSignedLinks()
                     await store.reload()
+                    await LogoCache.shared.prefetch(store.channels.compactMap(\.logoURL))
+                    _ = await (logos, signed)
                     await guide.refreshIfNeeded(for: store.channels)
                     // Açık kaldıkça liste ve akış kendiliğinden tazelenir; elle "Yenile" gerekmez
                     while !Task.isCancelled {
