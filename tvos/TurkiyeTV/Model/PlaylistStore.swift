@@ -110,7 +110,8 @@ final class PlaylistStore: ObservableObject {
         // Gist'in raw CDN önbelleğini atlamak için zaman damgası eklenir
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let cacheBuster = URLQueryItem(name: "t", value: String(Int(Date().timeIntervalSince1970)))
-        components?.queryItems = (components?.queryItems ?? []) + [cacheBuster]
+        let existingItems = components?.queryItems ?? []
+        components?.queryItems = existingItems + [cacheBuster]
         let request = URLRequest(url: components?.url ?? url,
                                  cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
                                  timeoutInterval: requestTimeout)
