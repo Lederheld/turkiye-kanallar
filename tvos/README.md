@@ -21,6 +21,9 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
   Kartlarda ve kanal bilgisinde o an yayındaki program; sararken hedefteki program; Zaman Tüneli menüsünde
   programların başlangıçları; oynatma çubuğunda **Baştan izle**. Canlının gerisindeyken sağ üstteki
   rozet birkaç saniye sonra küçük bir baloncuğa dönüşür
+- **Anında kanal geçişi:** Kanallar şeridinde bir kanalın üzerinde 0,6 sn durunca o kanal gizli ikinci
+  bir oynatıcıda sessizce açılır; seçilince bu oynatıcı ekrana alınır (simülatörde 0,1 sn; normalde
+  0,3-0,8 sn). Odak başka kanala geçince ya da şerit kapanınca durdurulur
 - **Hız:** kanal, liste tazelenmesini beklemeden eldeki linkle açılır (liste arka planda yenilenir);
   logolar ve ATV'nin imzalı linki açılışta önceden alınır, logolar bellekte tutulur
 - **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →

@@ -18,7 +18,8 @@ final class PlaybackController: ObservableObject {
     /// Bu kadarından az gerideyken canlıda sayılır (oynatıcı canlının birkaç segment gerisinden oynar).
     private static let liveTolerance: TimeInterval = 15
 
-    let player = AVPlayer()
+    /// Anında kanal geçişinde hazır bekleyen oynatıcıyla değiştirilir (bkz. prepareStandby).
+    @Published private(set) var player = AVPlayer()
 
     private let store: PlaylistStore
     private var statusObservation: NSKeyValueObservation?
@@ -47,15 +48,13 @@ final class PlaybackController: ObservableObject {
     init(channel: Channel, store: PlaylistStore) {
         self.channel = channel
         self.store = store
+        attachTimeObserver()
+    }
+
+    private func attachTimeObserver() {
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1, preferredTimescale: 1),
                                                       queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
-        }
-    }
-
-    deinit {
-        if let timeObserver {
-            player.removeTimeObserver(timeObserver)
         }
     }
 
@@ -70,7 +69,81 @@ final class PlaybackController: ObservableObject {
         rewindWindow = 0
         behindLive = 0
         liveLatency = nil
-        startFreshPlayback(forceReload: false)
+        if timeObserver == nil {
+            attachTimeObserver()  // stop() sonrası yeniden açılış
+        }
+        if let ready = standby, ready.channel.name == channel.name,
+           ready.player.currentItem?.status == .readyToPlay {
+            adopt(ready)
+        } else {
+            discardStandby()
+            startFreshPlayback(forceReload: false)
+        }
+    }
+
+    // MARK: - Anında kanal geçişi
+
+    /// Kanallar şeridinde üzerinde durulan kanal, gizli ikinci bir oynatıcıda sessizce oynatılır;
+    /// seçilince bu oynatıcı ekrana alınır ve görüntü beklemeden gelir. Odak başka kanala geçince ya da
+    /// şerit kapanınca durdurulur (ek bant genişliği yalnızca şeritte gezinirken kullanılır).
+    private struct Standby {
+        let channel: Channel
+        let player: AVPlayer
+        let sources: [StreamSources.Source]
+    }
+
+    private var standby: Standby?
+    private var standbyTask: Task<Void, Never>?
+    /// Şeritte hızla gezinirken her kanalı açmamak için bekleme.
+    private static let standbyDelay: Duration = .milliseconds(600)
+
+    func prepareStandby(_ channel: Channel) {
+        guard channel.name != self.channel.name else {
+            discardStandby()
+            return
+        }
+        guard standby?.channel.name != channel.name else { return }
+        standbyTask?.cancel()
+        standbyTask = Task {
+            try? await Task.sleep(for: Self.standbyDelay)
+            guard !Task.isCancelled else { return }
+            let sources = await StreamSources.candidates(for: channel)
+            guard !Task.isCancelled, let first = sources.first else { return }
+            discardStandby()
+            let item = AVPlayerItem(asset: Self.makeAsset(for: first))
+            item.externalMetadata = Self.metadata(for: channel)
+            let hidden = AVPlayer(playerItem: item)
+            hidden.isMuted = true
+            hidden.play()
+            standby = Standby(channel: channel, player: hidden, sources: sources)
+        }
+    }
+
+    func discardStandby() {
+        standbyTask?.cancel()
+        standbyTask = nil
+        standby?.player.pause()
+        standby?.player.replaceCurrentItem(with: nil)
+        standby = nil
+    }
+
+    /// Hazır bekleyen oynatıcıyı ekrana alır; eskisi durdurulur.
+    private func adopt(_ ready: Standby) {
+        standbyTask?.cancel()
+        standby = nil
+        startTask?.cancel()
+        healthTask?.cancel()
+        clearObservers()
+        if let timeObserver { player.removeTimeObserver(timeObserver) }
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        player = ready.player
+        player.isMuted = false
+        attachTimeObserver()
+        sources = ready.sources
+        sourceIndex = 0
+        guard let item = player.currentItem else { return }
+        observe(item)
     }
 
     func retry() {
@@ -248,12 +321,17 @@ final class PlaybackController: ObservableObject {
     }
 
     func stop() {
+        discardStandby()
         scrubTask?.cancel()
         swipeCommitTask?.cancel()
         saveWatchTime()
         startTask?.cancel()
         healthTask?.cancel()
         clearObservers()
+        if let timeObserver {
+            player.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
+        }
         player.pause()
         player.replaceCurrentItem(with: nil)
     }
@@ -288,9 +366,17 @@ final class PlaybackController: ObservableObject {
         clearObservers()
         let item = AVPlayerItem(asset: Self.makeAsset(for: source))
         item.externalMetadata = Self.metadata(for: channel)
+        player.replaceCurrentItem(with: item)
+        player.play()
+        observe(item)
+    }
+
+    /// Öğenin durumunu ve hatalarını izler; açılmayan ya da donan yayında sıradaki kaynağa geçilir.
+    private func observe(_ item: AVPlayerItem) {
         let itemID = ObjectIdentifier(item)
 
-        statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+        // .initial: hazır bekleyen oynatıcıdan gelen öğe zaten oynatılmaya hazır olabilir
+        statusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
             let status = item.status
             let error = item.error
             Task { @MainActor in self?.handleStatus(status, error: error, itemID: itemID) }
@@ -301,9 +387,6 @@ final class PlaybackController: ObservableObject {
             let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
             Task { @MainActor in self?.handleFailure(error, itemID: itemID) }
         }
-
-        player.replaceCurrentItem(with: item)
-        player.play()
         watchHealth(of: itemID)
     }
 

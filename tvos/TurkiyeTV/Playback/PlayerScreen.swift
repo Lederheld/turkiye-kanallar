@@ -426,6 +426,10 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
     }
 
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        // Anında kanal geçişinde hazır bekleyen oynatıcı ekrana alınır
+        if controller.player !== playback.player {
+            controller.player = playback.player
+        }
         updateTransportBar(controller, coordinator: context.coordinator)
     }
 
@@ -702,7 +706,16 @@ private struct ChannelStripView: View {
             .scrollClipDisabled()
             .defaultFocus($focusedName, playback.channel.name)
             .onAppear { focusCurrent(proxy) }
+            .onDisappear { playback.discardStandby() }
             .onChange(of: playback.channel.name) { _, _ in focusCurrent(proxy) }
+            // Üzerinde durulan kanal gizli oynatıcıda hazırlanır; seçilince anında açılır
+            .onChange(of: focusedName) { _, name in
+                if let name, let channel = store.channel(named: name) {
+                    playback.prepareStandby(channel)
+                } else {
+                    playback.discardStandby()
+                }
+            }
         }
     }
 
