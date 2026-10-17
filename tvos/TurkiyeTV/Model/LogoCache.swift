@@ -10,6 +10,7 @@ final class LogoCache: ObservableObject {
     private var inFlight: Set<URL> = []
     private static let maxConcurrentDownloads = 6
     private static let publishBatchSize = 8
+    private nonisolated static let displayWidth: CGFloat = 560
 
     func image(for url: URL) -> UIImage? {
         images[url]
@@ -52,9 +53,14 @@ final class LogoCache: ObservableObject {
     }
 
     private nonisolated static func download(_ url: URL) async -> UIImage? {
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
+        var request = URLRequest(url: url)
+        request.networkServiceType = .background  // izlenen yayınla bant genişliği yarışmasın
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
               let image = UIImage(data: data) else { return nil }
-        // Kodu çözülmüş halde tut: kaydırırken ilk çizimde takılmasın
-        return await image.byPreparingForDisplay() ?? image
+        // Gösterildiği boyuta küçültülüp kodu çözülmüş halde tutulur: daha az bellek, takılmadan kaydırma
+        // (kaynak logolar 960 px'e kadar çıkıyor, kartta en fazla ~560 px)
+        let scale = min(1, Self.displayWidth / max(image.size.width, 1))
+        let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        return await image.byPreparingThumbnail(ofSize: target) ?? image
     }
 }

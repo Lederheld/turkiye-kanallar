@@ -378,6 +378,7 @@ final class PlaybackController: ObservableObject {
         failureObserver = nil
     }
 
+    /// Playlist'teki #EXTVLCOPT header'ları (User-Agent / Referer) yayına eklenir.
     private static func makeAsset(for source: StreamSources.Source) -> AVURLAsset {
         let options: [String: Any] = source.headers.isEmpty ? [:] : ["AVURLAssetHTTPHeaderFieldsKey": source.headers]
         return AVURLAsset(url: source.url, options: options)
