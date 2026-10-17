@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PlaylistURL</key>
+	<string>$(PLAYLIST_URL)</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Bazı yayınlar ve yerel ağdaki live_resolver (CNN Türk) düz http -->
+		<key>NSAllowsArbitraryLoadsForMedia</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>CNN Türk yayını yerel ağdaki Mac'ten (live_resolver) alınır.</string>
+</dict>
+</plist>

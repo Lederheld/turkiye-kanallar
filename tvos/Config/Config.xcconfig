@@ -1,0 +1,8 @@
+// Ortak ayarlar. Kişisel değerler (gist adresi, Apple ekip kimliği) Secrets.xcconfig'e yazılır;
+// o dosya git'e girmez. Örnek: Secrets.example.xcconfig
+
+PRODUCT_BUNDLE_IDENTIFIER = com.example.turkiyetv
+DEVELOPMENT_TEAM =
+PLAYLIST_URL =
+
+#include? "Secrets.xcconfig"
