@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var store: PlaylistStore
     @State private var draftURL = ""
+    @AppStorage(SwipeSpeed.defaultsKey) private var swipeSpeed: SwipeSpeed = .normal
 
     var body: some View {
         HStack(alignment: .top, spacing: 80) {
@@ -26,6 +27,11 @@ struct SettingsView: View {
                     Picker("Açılışta", selection: $store.startupBehavior) {
                         ForEach(StartupBehavior.allCases) { behavior in
                             Text(behavior.title).tag(behavior)
+                        }
+                    }
+                    Picker("Kaydırarak sarma hızı", selection: $swipeSpeed) {
+                        ForEach(SwipeSpeed.allCases) { speed in
+                            Text(speed.title).tag(speed)
                         }
                     }
                 }

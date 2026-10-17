@@ -411,7 +411,7 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
             case .began:
                 playback.beginSwipeSeek()
             case .changed:
-                playback.updateSwipeSeek(fraction: recognizer.translation(in: view).x / max(view.bounds.width, 1))
+                playback.updateSwipeSeek(points: recognizer.translation(in: view).x)
             case .ended, .cancelled, .failed:
                 playback.endSwipeSeek()
             default:

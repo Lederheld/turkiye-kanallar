@@ -157,12 +157,11 @@ final class PlaybackController: ObservableObject {
         lastSwipeSeek = nil
     }
 
-    /// `fraction`: yüzey genişliğine göre kaydırma (sola negatif). Doğrusal değil: kısa kaydırma birkaç
-    /// dakika (0,1 → ~5 dk), yarım kaydırma ~50 dk, tam kaydırma ~2,5 saat. Parmak hareket ettikçe
-    /// görüntü atlar; çok sık atlamamak için en az 20 sn fark ve 0,2 sn ara beklenir.
-    func updateSwipeSeek(fraction: Double) {
+    /// `points`: dokunmatik yüzeydeki yatay kaydırma (sola negatif). Parmak hareket ettikçe görüntü atlar;
+    /// çok sık atlamamak için en az 20 sn fark ve 0,2 sn ara beklenir.
+    func updateSwipeSeek(points: Double) {
         guard let swipeStart else { return }
-        let target = swipeStart + Self.swipeDistance(fraction)
+        let target = swipeStart + Self.swipeDistance(points) * SwipeSpeed.current.multiplier
         if let last = lastSwipeSeek,
            abs(last.target - target) < Self.swipeSeekMinimumDistance
             || Date().timeIntervalSince(last.at) < Self.swipeSeekMinimumInterval { return }
@@ -178,10 +177,12 @@ final class PlaybackController: ObservableObject {
         lastSwipeSeek = nil
     }
 
-    private static func swipeDistance(_ fraction: Double) -> TimeInterval {
-        let magnitude = min(abs(fraction), 1)
-        let minutes = 40 * magnitude * (1 + 3 * magnitude)
-        return (fraction < 0 ? -minutes : minutes) * 60
+    /// Doğrusal değil: kısa kaydırma ince ayar, uzun kaydırma saatler. Siri Remote'ta yüzeyin bir ucundan
+    /// diğerine kaydırma ~600 nokta: çeyrek ~6 dk, yarım ~20 dk, tam ~1 sa, art arda iki tam kaydırma ~3,5 sa.
+    private static func swipeDistance(_ points: Double) -> TimeInterval {
+        let surfaces = min(abs(points) / 600, 4)
+        let minutes = 15 * surfaces + 45 * surfaces * surfaces
+        return (points < 0 ? -minutes : minutes) * 60
     }
 
     /// Hedef, oynatma konumu ve canlı uçtan hesaplanır; sunucunun tuttuğu pencereye sıkıştırılır.
@@ -374,5 +375,34 @@ final class PlaybackController: ObservableObject {
         title.value = channel.name as NSString
         title.extendedLanguageTag = "und"
         return [title]
+    }
+}
+
+/// Ayarlar'dan seçilen kaydırarak sarma hızı.
+enum SwipeSpeed: String, CaseIterable, Identifiable {
+    case slow, normal, fast
+
+    static let defaultsKey = "swipeSeekSpeed"
+
+    static var current: SwipeSpeed {
+        UserDefaults.standard.string(forKey: defaultsKey).flatMap(SwipeSpeed.init(rawValue:)) ?? .normal
+    }
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .slow: return "Yavaş"
+        case .normal: return "Normal"
+        case .fast: return "Hızlı"
+        }
+    }
+
+    var multiplier: Double {
+        switch self {
+        case .slow: return 0.5
+        case .normal: return 1
+        case .fast: return 2
+        }
     }
 }
