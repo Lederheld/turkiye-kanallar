@@ -7,7 +7,7 @@ import math
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 SS = 4  # süper örnekleme (kenar yumuşatma)
 INFO = {"author": "xcode", "version": 1}
@@ -16,6 +16,8 @@ INFO = {"author": "xcode", "version": 1}
 BG_TOP = (30, 30, 38)
 BG_BOTTOM = (8, 8, 12)
 HALO = (255, 50, 80)
+# Ekrandaki "TV" yazısı: (dosya, koleksiyondaki yüz, değişken yazı tipi ağırlığı). macOS yazı tipleri.
+LABEL_FONT = ("/System/Library/Fonts/Avenir Next.ttc", 9, None)  # Heavy Italic
 SCREEN_STOPS = [(0.0, (255, 140, 60)), (0.45, (255, 45, 85)), (1.0, (175, 40, 230))]
 
 
@@ -141,6 +143,32 @@ def draw_glass_rim(img, box, radius):
     img.paste(white, (0, 0), multiply(streak.filter(ImageFilter.GaussianBlur(h * 0.02)), screen))
 
 
+def draw_label(img, screen_box, text="TV", font_spec=None):
+    """Ekranın ortasına beyaz yazı; altında hafif gölge."""
+    path, index, variation = font_spec or LABEL_FONT
+    sx0, sy0, sx1, sy1 = screen_box
+    sh = sy1 - sy0
+    font = ImageFont.truetype(path, int(sh * 0.62), index=index)
+    if variation:
+        font.set_variation_by_name(variation)
+    W, H = img.size
+    cx, cy = (sx0 + sx1) / 2, (sy0 + sy1) / 2
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).text((cx, cy), text, font=font, fill=255, anchor="mm")
+    # harflerin optik ortası: mürekkep kutusuna göre yeniden ortala
+    bx0, by0, bx1, by1 = mask.getbbox()
+    mask = ImageChops.offset(mask, int(cx - (bx0 + bx1) / 2), int(cy - (by0 + by1) / 2))
+    shadow = ImageChops.offset(mask, 0, int(sh * 0.03)).filter(ImageFilter.GaussianBlur(sh * 0.04))
+    img.paste(Image.new("RGBA", (W, H), (60, 0, 30, 255)), (0, 0), shadow.point(lambda v: v * 0.5))
+    img.paste(Image.new("RGBA", (W, H), (255, 255, 255, 255)), (0, 0), mask)
+
+
+def screen_box_of(box):
+    x0, y0, x1, y1 = box
+    bezel = (y1 - y0) * 0.05
+    return (x0 + bezel, y0 + bezel, x1 - bezel, y1 - bezel)
+
+
 def icon_layers(w, h):
     W, H = w * SS, h * SS
     back = background(w, h)
@@ -149,6 +177,7 @@ def icon_layers(w, h):
     middle = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     _, radius = draw_glass_tv(middle, box)
     front = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw_label(front, screen_box_of(box))
     draw_glass_rim(front, box, radius)
     return {"Back": back, "Middle": finish(middle, (w, h)), "Front": finish(front, (w, h))}
 
@@ -159,6 +188,7 @@ def top_shelf(w, h):
     img = background(W, H).convert("RGBA")
     box = tv_geometry(W / 2, H * 0.44, H * 0.46)
     _, radius = draw_glass_tv(img, box)
+    draw_label(img, screen_box_of(box))
     draw_glass_rim(img, box, radius)
     return finish(img, (w, h)).convert("RGB")
 

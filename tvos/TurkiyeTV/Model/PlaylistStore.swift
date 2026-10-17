@@ -1,5 +1,19 @@
 import Foundation
 
+enum StartupBehavior: String, CaseIterable, Identifiable {
+    case mostWatched, lastChannel, home
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .mostWatched: return "En çok izlenen kanal"
+        case .lastChannel: return "Son izlenen kanal"
+        case .home: return "Ana sayfa"
+        }
+    }
+}
+
 enum PlaylistError: LocalizedError {
     case badStatus(Int)
     case noChannels
@@ -24,23 +38,39 @@ final class PlaylistStore: ObservableObject {
     @Published private(set) var favoriteNames: [String]
     @Published private(set) var customPlaylistURL: String
     @Published private(set) var recentNames: [String]
-    @Published var resumesLastChannel: Bool {
-        didSet { defaults.set(resumesLastChannel, forKey: Keys.resumeLastChannel) }
+    /// Uygulama açılınca ne olacağı (bir TV gibi doğrudan bir kanalla açılabilir).
+    @Published var startupBehavior: StartupBehavior {
+        didSet { defaults.set(startupBehavior.rawValue, forKey: Keys.startupBehavior) }
     }
+    /// Kategoriler ve kanallar izleme süresine göre sıralanır (kanal numaraları değişmez).
+    @Published var sortsByWatchTime: Bool {
+        didSet { defaults.set(sortsByWatchTime, forKey: Keys.sortsByWatchTime) }
+    }
+    /// Kanal adı → [izleme puanı (sn), son güncelleme (1970'ten sn)]. Puan yarılanma süresiyle eskir.
+    @Published private(set) var watchHistory: [String: [Double]]
 
     /// Listedeki sırası (1'den başlar); kumandadan kanal değiştirirken ve kartlarda gösterilir.
     private(set) var numbers: [String: Int] = [:]
     private static let recentLimit = 12
+    /// İki hafta önceki izleme bugünkünün yarısı kadar sayılır; alışkanlık değişince sıra da değişir.
+    private static let watchHalfLife: TimeInterval = 14 * 24 * 3600
+    /// "En Çok İzlediklerin" rafına girmek için gereken en az puan.
+    private static let frequentThreshold: TimeInterval = 5 * 60
 
     /// DMAX/TLC/Beyaz TV linkleri 30 dk'da bir yenileniyor; bundan eski liste tazelenir.
     private static let staleInterval: TimeInterval = 10 * 60
     private static let requestTimeout: TimeInterval = 20
+    /// Uygulama açıkken listenin kontrol edilme aralığı (liste eskiyse yeniden indirilir).
+    static let autoRefreshInterval: Duration = .seconds(5 * 60)
 
     private enum Keys {
         static let favorites = "favoriteChannelNames"
         static let customURL = "customPlaylistURL"
         static let recents = "recentChannelNames"
-        static let resumeLastChannel = "resumesLastChannel"
+        static let resumeLastChannel = "resumesLastChannel"  // eski ayar; yalnızca taşımak için okunur
+        static let startupBehavior = "startupBehavior"
+        static let sortsByWatchTime = "sortsByWatchTime"
+        static let watchHistory = "watchHistory"
     }
 
     private let defaults = UserDefaults.standard
@@ -50,7 +80,11 @@ final class PlaylistStore: ObservableObject {
         favoriteNames = defaults.stringArray(forKey: Keys.favorites) ?? []
         customPlaylistURL = defaults.string(forKey: Keys.customURL) ?? ""
         recentNames = defaults.stringArray(forKey: Keys.recents) ?? []
-        resumesLastChannel = defaults.object(forKey: Keys.resumeLastChannel) as? Bool ?? true
+        let legacyResume = defaults.object(forKey: Keys.resumeLastChannel) as? Bool
+        startupBehavior = defaults.string(forKey: Keys.startupBehavior).flatMap(StartupBehavior.init(rawValue:))
+            ?? (legacyResume == false ? .home : .mostWatched)
+        sortsByWatchTime = defaults.object(forKey: Keys.sortsByWatchTime) as? Bool ?? true
+        watchHistory = defaults.dictionary(forKey: Keys.watchHistory) as? [String: [Double]] ?? [:]
         loadCachedPlaylist()
     }
 
@@ -159,12 +193,34 @@ final class PlaylistStore: ObservableObject {
         numbers[channel.name]
     }
 
-    /// Kategoriler sabit sırada; boş olanlar atlanır.
+    /// Boş kategoriler atlanır. İzleme süresine göre sıralama açıksa en çok izlenen kategori ve
+    /// kategori içinde en çok izlenen kanal öne gelir; eşitlikte sabit sıra (kanal numarası) korunur.
     var categorySections: [(category: ChannelCategory, channels: [Channel])] {
         let grouped = Dictionary(grouping: channels, by: \.category)
-        return ChannelCategory.allCases.compactMap { category in
-            grouped[category].map { (category, $0) }
+        let sections = ChannelCategory.allCases.compactMap { category in
+            grouped[category].map { (category: category, channels: ordered($0)) }
         }
+        guard sortsByWatchTime else { return sections }
+        let now = Date()
+        let totals = sections.map { section in section.channels.reduce(0) { $0 + watchScore(of: $1, at: now) } }
+        return zip(sections, totals).enumerated()
+            .sorted { ($0.element.1, -$0.offset) > ($1.element.1, -$1.offset) }
+            .map(\.element.0)
+    }
+
+    /// İzleme süresine göre (açıksa) sıralar; eşitlikte listedeki sıra korunur.
+    func ordered(_ list: [Channel]) -> [Channel] {
+        guard sortsByWatchTime else { return list }
+        let now = Date()
+        return list.enumerated()
+            .sorted { (watchScore(of: $0.element, at: now), -$0.offset) > (watchScore(of: $1.element, at: now), -$1.offset) }
+            .map(\.element)
+    }
+
+    /// Ana sayfadaki "En Çok İzlediklerin" rafı.
+    var frequentChannels: [Channel] {
+        let now = Date()
+        return ordered(channels).filter { watchScore(of: $0, at: now) >= Self.frequentThreshold }.prefix(12).map { $0 }
     }
 
     /// Listede `offset` kadar ilerideki kanal; uçlarda başa/sona sarar.
@@ -216,6 +272,22 @@ final class PlaylistStore: ObservableObject {
         recentChannels.first
     }
 
+    /// İzleme süresi en yüksek kanal (hiç izleme yoksa nil).
+    var mostWatchedChannel: Channel? {
+        let now = Date()
+        return channels.max { watchScore(of: $0, at: now) < watchScore(of: $1, at: now) }
+            .flatMap { watchScore(of: $0, at: now) > 0 ? $0 : nil }
+    }
+
+    /// Açılışta oynatılacak kanal; ayara göre, yoksa son izlenen.
+    var startupChannel: Channel? {
+        switch startupBehavior {
+        case .mostWatched: return mostWatchedChannel ?? lastChannel
+        case .lastChannel: return lastChannel
+        case .home: return nil
+        }
+    }
+
     func recordWatched(_ channel: Channel) {
         recentNames.removeAll { $0 == channel.name }
         recentNames.insert(channel.name, at: 0)
@@ -226,5 +298,26 @@ final class PlaylistStore: ObservableObject {
     func clearRecents() {
         recentNames = []
         defaults.removeObject(forKey: Keys.recents)
+    }
+
+    // MARK: - İzleme süresi
+
+    func watchScore(of channel: Channel, at date: Date = Date()) -> TimeInterval {
+        guard let entry = watchHistory[channel.name], entry.count == 2 else { return 0 }
+        let age = date.timeIntervalSince1970 - entry[1]
+        return entry[0] * pow(0.5, max(0, age) / Self.watchHalfLife)
+    }
+
+    func addWatchTime(_ seconds: TimeInterval, to channel: Channel) {
+        guard seconds > 0 else { return }
+        let now = Date()
+        watchHistory[channel.name] = [watchScore(of: channel, at: now) + seconds, now.timeIntervalSince1970]
+        defaults.set(watchHistory, forKey: Keys.watchHistory)
+    }
+
+    func clearWatchHistory() {
+        watchHistory = [:]
+        defaults.removeObject(forKey: Keys.watchHistory)
+        clearRecents()
     }
 }

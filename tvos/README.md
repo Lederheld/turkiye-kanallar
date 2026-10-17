@@ -6,10 +6,25 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
   (Ulusal, Haber, Ekonomi, Spor, Çocuk, Belgesel ve Yaşam, Müzik). Kategori kanal adından çıkarılır
 - **Kanallar:** tüm kanallar numaralı ızgarada. **Ara:** ada ya da kanal numarasına göre arama
 - Uzun basışla favorilere ekleme
-- Bir TV gibi açılışta son kanal kaldığı yerden başlar (Ayarlar'dan kapatılabilir)
-- Oynatırken: kanal değişince kanal bilgisi görünür; oynatma çubuğu gizliyken kumandada yukarı/aşağı
-  tıklama (ya da CEC kumandadaki kanal +/-) kanal değiştirir; çubukta önceki/sonraki/son kanal ve
-  favori düğmeleri; aşağı kaydırınca **Kanallar** şeridi
+- Bir TV gibi açılışta en çok izlenen kanal başlar (Ayarlar'dan son kanal ya da ana sayfa seçilebilir)
+- Oynatırken: kanal değişince kanal bilgisi görünür; çubukta önceki/sonraki/son kanal ve favori
+  düğmeleri; TV kumandasındaki (CEC) kanal +/- tuşları kanal değiştirir; aşağı kaydırınca
+  izlenen kanaldan başlayan **Kanallar** şeridi
+- **Geri sarma:** kumandada sol/sağ basılı tutunca hızlanarak sarar (5, 10, 20, 30, 45 dk, 1 sa, sonra
+  yarım saat yarım saat); ekranda hedef saat görünür, bırakınca oraya gider. Yayının sunucuda tuttuğu süre kadar (TRT 1'de yaklaşık 24 saat, çoğu özel kanalda
+  birkaç dakika) 10 dk geri/ileri ve **Canlıya dön** düğmeleri; geri kalındığında sağ üstte
+  "Canlının … gerisinde" rozeti. Uzun geri sarma için aşağı kaydırınca **Zaman Tüneli** sekmesi:
+  canlıdan geriye 15 dakikalık adımlar, tek tıkla o saate gidilir. Uygulama kendisi kayıt yapmaz
+- **Yayın akışı:** epgshare01 ve open-epg'den (XMLTV) 6 saatte bir indirilir, dün önbellekte tutulur.
+  Kartlarda ve kanal bilgisinde o an yayındaki program; sararken hedefteki program; Zaman Tüneli'nde
+  programların başlangıçları; oynatma çubuğunda **Baştan izle**. Canlının gerisindeyken sağ üstteki
+  rozet birkaç saniye sonra küçük bir baloncuğa dönüşür
+- **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →
+  listedeki link → tek kaliteli linkin ana playlist'i). Yayın 10 sn açılmazsa ya da donarsa sıradakine
+  geçilir; hepsi biterse liste yenilenip bir tur daha denenir. ATV, listedeki sorunlu CDN yerine
+  atv.com.tr'nin token servisinden Apple TV'nin kendisi için alınan linkle oynar
+- **Kişiselleştirme:** izleme süresi kanal başına tutulur (iki haftada yarıya iner); en çok izlenen
+  kategoriler ve kanallar öne gelir, ana sayfada **En Çok İzlediklerin** rafı. Ayarlar'dan kapatılabilir
 - Playlist'teki `#EXTVLCOPT` User-Agent / Referer header'larını yayına ekler
 - Liste 10 dakikadan eskiyse oynatmadan önce tazelenir. Yayın hata verirse liste yenilenip
   bir kez daha denenir (DMAX/TLC/Beyaz TV'nin süreli linkleri için)

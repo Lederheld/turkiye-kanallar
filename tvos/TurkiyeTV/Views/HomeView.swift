@@ -14,6 +14,10 @@ struct HomeView: View {
                 if let featured {
                     HeroView(channel: featured, isResume: store.lastChannel != nil)
                         .focusSection()
+                    if store.sortsByWatchTime && !store.frequentChannels.isEmpty {
+                        ChannelShelf(title: "En Çok İzlediklerin", symbol: "chart.bar.fill",
+                                     channels: store.frequentChannels)
+                    }
                     if !store.favoriteChannels.isEmpty {
                         ChannelShelf(title: "Favoriler", symbol: "star.fill", channels: store.favoriteChannels)
                     }
@@ -37,6 +41,7 @@ struct HomeView: View {
 /// Üstteki büyük kart: tek tuşla izlemeye başlama.
 private struct HeroView: View {
     @EnvironmentObject private var store: PlaylistStore
+    @EnvironmentObject private var guide: ProgramGuide
     @Environment(\.playChannel) private var playChannel
     let channel: Channel
     let isResume: Bool
@@ -60,7 +65,7 @@ private struct HeroView: View {
                     .font(.system(size: 76, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                Text(isResume ? "Kaldığın kanaldan devam et" : "Canlı yayını hemen izle")
+                Text(nowPlaying ?? (isResume ? "Kaldığın kanaldan devam et" : "Canlı yayını hemen izle"))
                     .font(.title3)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 28) {
@@ -89,6 +94,11 @@ private struct HeroView: View {
         .overlay(alignment: .topTrailing) {
             ClockView().padding(36)
         }
+    }
+
+    private var nowPlaying: String? {
+        guard let program = guide.program(for: channel) else { return nil }
+        return "Şimdi: \(program.title) · \(ProgramText.timeRange(program))"
     }
 
     private var subtitle: String {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: PlaylistStore
+    @EnvironmentObject private var guide: ProgramGuide
     @Environment(\.scenePhase) private var scenePhase
     @State private var playingChannel: Channel?
     @State private var didResume = false
@@ -20,19 +21,22 @@ struct ContentView: View {
         .background(AppBackground())
         .environment(\.playChannel, PlayChannelAction { playingChannel = $0 })
         .fullScreenCover(item: $playingChannel) { channel in
-            PlayerScreen(channel: channel, store: store)
+            PlayerScreen(channel: channel, store: store, guide: guide)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task { await store.reloadIfStale() }
+                Task {
+                    await store.reloadIfStale()
+                    await guide.refreshIfNeeded(for: store.channels)
+                }
             }
         }
-        // Bir TV gibi: açılışta son izlenen kanal kaldığı yerden başlar
+        // Bir TV gibi: açılışta (ayara göre) en çok ya da son izlenen kanal başlar
         .onChange(of: store.channels.isEmpty, initial: true) { _, isEmpty in
             guard !isEmpty, !didResume else { return }
             didResume = true
-            if store.resumesLastChannel, let last = store.lastChannel {
-                playingChannel = last
+            if let channel = store.startupChannel {
+                playingChannel = channel
             }
         }
     }

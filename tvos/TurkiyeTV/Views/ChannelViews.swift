@@ -31,6 +31,7 @@ struct ChannelLogo: View {
 /// Logo kartı; altında ad ve kategori. Uzun basışla favorilere eklenir.
 struct ChannelCard: View {
     @EnvironmentObject private var store: PlaylistStore
+    @EnvironmentObject private var guide: ProgramGuide
     @Environment(\.playChannel) private var playChannel
     let channel: Channel
     var width: CGFloat = Theme.cardSize.width
@@ -69,9 +70,11 @@ struct ChannelCard: View {
                 Text(channel.name)
                     .font(.callout.weight(.semibold))
                     .lineLimit(1)
-                Text(channel.category.title)
+                // Şu an yayındaki program; akış yoksa kategori
+                Text(guide.program(for: channel)?.title ?? channel.category.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             .frame(width: width, alignment: .leading)
         }

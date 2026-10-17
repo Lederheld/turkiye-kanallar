@@ -23,9 +23,21 @@ struct SettingsView: View {
 
             Form {
                 Section("Oynatma") {
-                    Toggle("Açılışta son kanalı oynat", isOn: $store.resumesLastChannel)
-                    Button("Son izlenenleri temizle", role: .destructive) { store.clearRecents() }
-                        .disabled(store.recentNames.isEmpty)
+                    Picker("Açılışta", selection: $store.startupBehavior) {
+                        ForEach(StartupBehavior.allCases) { behavior in
+                            Text(behavior.title).tag(behavior)
+                        }
+                    }
+                }
+
+                Section {
+                    Toggle("Kanalları izleme süreme göre sırala", isOn: $store.sortsByWatchTime)
+                    Button("İzleme geçmişini sıfırla", role: .destructive) { store.clearWatchHistory() }
+                        .disabled(store.recentNames.isEmpty && store.watchHistory.isEmpty)
+                } header: {
+                    Text("Kişiselleştirme")
+                } footer: {
+                    Text("En çok izlediğin kategoriler ve kanallar öne gelir; son iki haftanın izlemesi daha ağır basar. Kanal numaraları değişmez.")
                 }
 
                 Section {
@@ -44,7 +56,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Kanal listesi")
                 } footer: {
-                    Text("Liste uygulama açıldığında ve 10 dakikadan eskiyse kendiliğinden yenilenir.")
+                    Text("Liste açılışta ve uygulama açık kaldıkça 10 dakikada bir kendiliğinden yenilenir; yeni kanallar ve linkler elle güncellemeden gelir.")
                 }
 
                 Section {
