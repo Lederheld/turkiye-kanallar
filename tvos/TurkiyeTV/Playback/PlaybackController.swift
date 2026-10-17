@@ -160,6 +160,7 @@ final class PlaybackController: ObservableObject {
         guard canRewind else { return }
         swipeCommitTask?.cancel()
         swipeStartBehind = swipeTargetBehind ?? behindLive
+        swipeTargetBehind = swipeStartBehind  // hedef ilk hareketle hemen görünsün
     }
 
     /// `points`: dokunmatik yüzeydeki yatay kaydırma (sola negatif = geriye).

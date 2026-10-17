@@ -62,10 +62,8 @@ struct PlayerScreen: View {
                                       window: playback.rewindWindow,
                                       program: guide.program(for: playback.channel, at: Date().addingTimeInterval(-target)))
                         .allowsHitTesting(false)
-                        .transition(.opacity)
                 }
             }
-            .animation(.easeOut(duration: 0.15), value: playback.swipeTargetBehind == nil)
             .overlay(alignment: .topTrailing) {
                 if playback.isBehindLive && playback.errorMessage == nil {
                     BehindLiveBadge(seconds: playback.behindLive)
@@ -503,7 +501,14 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate, AVPlayerViewControllerDelegate {
         let playback: PlaybackController
         var transportState: TransportState?
-        private var swipeRecognizer: UIPanGestureRecognizer?
+        /// Dokunmatik yüzeydeki parmağı ilk temastan izler (UIPanGestureRecognizer ancak belirgin bir
+        /// hareketten sonra başladığı için hedef geç görünüyordu). Yatay hareket eşiği geçince sarma başlar.
+        private var touchTracker: UILongPressGestureRecognizer?
+        private var touchStart: CGPoint?
+        private var isSwiping = false
+        /// Bu kadar yatay hareketten sonra sarma başlar; dikey hareket önce gelirse (aşağı: Kanallar) hiç başlamaz.
+        private static let swipeStartDistance: CGFloat = 12
+        private static let verticalRejectDistance: CGFloat = 20
         /// Odak oynatıcının kendisinde (çubuk gizli ya da zaman çubuğunda) mı? Çubuktaki düğmelerdeyken ya da
         /// Kanallar panelindeyken yatay kaydırma odağı gezdirir, sarmaz. AVKit bu durumu açıkça vermediği
         /// için odaklanan görünümün sınıf adına bakılır; tanınmazsa sarma devre dışı kalır (AVKit'in davranışı).
@@ -525,11 +530,15 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
                 recognizer.delegate = self
                 view.addGestureRecognizer(recognizer)
             }
-            let swipe = UIPanGestureRecognizer(target: self, action: #selector(swipeScrub))
-            swipe.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
-            swipe.delegate = self
-            view.addGestureRecognizer(swipe)
-            swipeRecognizer = swipe
+            let tracker = UILongPressGestureRecognizer(target: self, action: #selector(trackTouch))
+            tracker.minimumPressDuration = 0
+            tracker.allowableMovement = 10_000
+            tracker.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+            tracker.allowedPressTypes = []
+            tracker.cancelsTouchesInView = false
+            tracker.delegate = self
+            view.addGestureRecognizer(tracker)
+            touchTracker = tracker
             focusObserver = NotificationCenter.default.addObserver(
                 forName: UIFocusSystem.didUpdateNotification, object: nil, queue: .main
             ) { [weak self] notification in
@@ -549,15 +558,32 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
             MainActor.assumeIsolated { playback.isTransportBarVisible = visible }
         }
 
-        @objc private func swipeScrub(_ recognizer: UIPanGestureRecognizer) {
+        @objc private func trackTouch(_ recognizer: UILongPressGestureRecognizer) {
             guard let view = recognizer.view else { return }
+            let location = recognizer.location(in: view)
             switch recognizer.state {
             case .began:
-                playback.beginSwipeSeek()
+                touchStart = location
+                isSwiping = false
             case .changed:
-                playback.updateSwipeSeek(points: recognizer.translation(in: view).x)
+                guard let start = touchStart else { return }
+                let dx = location.x - start.x
+                let dy = location.y - start.y
+                if !isSwiping {
+                    if abs(dy) > Self.verticalRejectDistance && abs(dy) > abs(dx) {
+                        touchStart = nil  // dikey kaydırma: AVKit'e bırak
+                        return
+                    }
+                    guard abs(dx) > Self.swipeStartDistance, abs(dx) > abs(dy) * 1.5,
+                          focusIsOnPlayer, playback.isPlaying, playback.canRewind else { return }
+                    isSwiping = true
+                    playback.beginSwipeSeek()
+                }
+                playback.updateSwipeSeek(points: dx)
             case .ended, .cancelled, .failed:
-                playback.endSwipeSeek()
+                if isSwiping { playback.endSwipeSeek() }
+                touchStart = nil
+                isSwiping = false
             default:
                 break
             }
@@ -588,24 +614,18 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         @objc private func zapUp() { playback.zap(by: 1) }
         @objc private func zapDown() { playback.zap(by: -1) }
 
-        /// Yatay kaydırma yalnızca oynarken, odak oynatıcıdayken ve geri sarılabilen yayında sarar.
-        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            guard gestureRecognizer === swipeRecognizer, let pan = swipeRecognizer, let view = pan.view else { return true }
-            let velocity = pan.velocity(in: view)
-            return focusIsOnPlayer && playback.isPlaying && playback.canRewind && abs(velocity.x) > abs(velocity.y) * 1.5
-        }
-
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            // Basılı tutma bizim: AVKit'in kendi yavaş taraması aynı anda başlamasın
-            !(gestureRecognizer is UILongPressGestureRecognizer)
+            // Dokunma izleyici AVKit'i engellemez (çubuğu o gösterir); sol/sağ basılı tutma ise bizim:
+            // AVKit'in kendi yavaş taraması aynı anda başlamasın
+            gestureRecognizer === touchTracker || !(gestureRecognizer is UILongPressGestureRecognizer)
         }
 
         /// AVKit'in yalnızca sol/sağ tuş tanıyıcıları basılı tutmanın sonucunu bekler. Hepsini bekletmek
         /// (önceki hata) AVKit'in zaman çubuğunda kaydırarak sarmasını tamamen kilitliyordu.
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-            guard other.view !== gestureRecognizer.view else { return false }
+            guard other.view !== gestureRecognizer.view, gestureRecognizer !== touchTracker else { return false }
             if gestureRecognizer is UILongPressGestureRecognizer {
                 return other.allowedPressTypes.contains { Self.arrowPressTypes.contains($0.intValue) }
             }
