@@ -11,14 +11,12 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
   düğmeleri; TV kumandasındaki (CEC) kanal +/- tuşları kanal değiştirir; aşağı kaydırınca
   izlenen kanaldan başlayan **Kanallar** şeridi
 - **Geri sarma:** yayının sunucuda tuttuğu süre kadar (TRT 1'de yaklaşık 24 saat, çoğu özel kanalda
-  birkaç dakika). Oynarken dokunmatik yüzeyde sola/sağa kaydırınca görüntü sarılır, alttaki
-  tek zaman çubuğu (AVKit'inki) konumu gösterir; kısa kaydırma ince ayar, uzun kaydırma saatler
-  (hızı Ayarlar'dan Yavaş/Normal/Hızlı). Duraklatılmışken
-  AVKit'in kendi sarması çalışır.
-  Sol/sağ basılı tutunca görüntü hızlanarak sarılır (5, 10, 20, 30, 45 dk, 1 sa, sonra yarım saat
-  yarım saat). Çubukta 10 dk geri/ileri, **Canlıya dön** ve **Zaman Tüneli** menüsü (program
-  başlangıçları, akış yoksa yarım saatler). Geri kalındığında sağ üstte "Canlının … gerisinde" rozeti.
-  Uygulama kendisi kayıt yapmaz
+  birkaç dakika). Oynarken dokunmatik yüzeyde sola/sağa kaydırınca hedef, AVKit'in tek zaman çubuğunun
+  üstünde saat ve programla gösterilir; bırakınca oraya atlanır, art arda kaydırmalar toplanır (hızı
+  Ayarlar'dan). Çubuk program sınırlarında bölümlere ayrılır. Sol/sağ basılı tutunca görüntü hızlanarak
+  sarılır (5, 10, 20, 30, 45 dk, 1 sa…). Çubukta yalnızca iki menü: **Zaman Tüneli** (Canlıya dön,
+  Programın başına, 10 dk geri/ileri, program başlangıçları) ve **Kanal** (önceki/sonraki/son kanal,
+  favori). Geri kalındığında sağ üstte "Canlının … gerisinde" rozeti. Uygulama kendisi kayıt yapmaz
 - **Yayın akışı:** epgshare01 ve open-epg'den (XMLTV) 6 saatte bir indirilir, dün önbellekte tutulur.
   Kartlarda ve kanal bilgisinde o an yayındaki program; sararken hedefteki program; Zaman Tüneli menüsünde
   programların başlangıçları; oynatma çubuğunda **Baştan izle**. Canlının gerisindeyken sağ üstteki

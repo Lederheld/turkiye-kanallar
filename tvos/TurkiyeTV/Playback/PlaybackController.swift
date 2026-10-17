@@ -38,11 +38,6 @@ final class PlaybackController: ObservableObject {
     private var unsavedWatchTime: TimeInterval = 0
     private static let watchTimeSaveInterval: TimeInterval = 30
     private var scrubTask: Task<Void, Never>?
-    /// Kaydırarak sarma: başladığı konum ve en son istenen atlama (her küçük harekette atlanmaz).
-    private var swipeStart: TimeInterval?
-    private var lastSwipeSeek: (target: TimeInterval, at: Date)?
-    private static let swipeSeekMinimumDistance: TimeInterval = 20
-    private static let swipeSeekMinimumInterval: TimeInterval = 0.2
     /// Basılı tuttukça büyüyen adımlar; listenin sonundan sonra yarım saat yarım saat artar.
     private static let scrubSteps: [TimeInterval] = [5, 10, 20, 30, 45, 60].map { $0 * 60 }
     private static let scrubStepInterval: Duration = .milliseconds(800)
@@ -151,30 +146,38 @@ final class PlaybackController: ObservableObject {
 
     // MARK: - Kaydırarak sarma
 
+    /// Kaydırırken hedef: canlının kaç saniye gerisi. Görüntü kaydırma sırasında atlamaz (cihazda her atlama
+    /// zaman alıyor, kaydırırken hiçbir şey görünmüyordu); hedef zaman çubuğunun üstünde gösterilir,
+    /// parmak kalkıp kısa bir süre yeni kaydırma gelmezse oraya atlanır. Art arda kaydırmalar toplanır.
+    @Published private(set) var swipeTargetBehind: TimeInterval?
+    /// AVKit'in oynatma çubuğu görünüyor mu (üstüne program bölümleri çizilir).
+    @Published var isTransportBarVisible = false
+    private var swipeStartBehind: TimeInterval = 0
+    private var swipeCommitTask: Task<Void, Never>?
+    private static let swipeCommitDelay: Duration = .milliseconds(700)
+
     func beginSwipeSeek() {
         guard canRewind else { return }
-        swipeStart = player.currentTime().seconds
-        lastSwipeSeek = nil
+        swipeCommitTask?.cancel()
+        swipeStartBehind = swipeTargetBehind ?? behindLive
     }
 
-    /// `points`: dokunmatik yüzeydeki yatay kaydırma (sola negatif). Parmak hareket ettikçe görüntü atlar;
-    /// çok sık atlamamak için en az 20 sn fark ve 0,2 sn ara beklenir.
+    /// `points`: dokunmatik yüzeydeki yatay kaydırma (sola negatif = geriye).
     func updateSwipeSeek(points: Double) {
-        guard let swipeStart else { return }
-        let target = swipeStart + Self.swipeDistance(points) * SwipeSpeed.current.multiplier
-        if let last = lastSwipeSeek,
-           abs(last.target - target) < Self.swipeSeekMinimumDistance
-            || Date().timeIntervalSince(last.at) < Self.swipeSeekMinimumInterval { return }
-        lastSwipeSeek = (target, Date())
-        seek { _, _ in target }
+        guard canRewind else { return }
+        let distance = Self.swipeDistance(points) * SwipeSpeed.current.multiplier
+        swipeTargetBehind = min(max(swipeStartBehind - distance, 0), rewindWindow)
     }
 
     func endSwipeSeek() {
-        if let lastSwipeSeek {
-            seek { _, _ in lastSwipeSeek.target }
+        guard swipeTargetBehind != nil else { return }
+        swipeCommitTask?.cancel()
+        swipeCommitTask = Task {
+            try? await Task.sleep(for: Self.swipeCommitDelay)
+            guard !Task.isCancelled, let target = swipeTargetBehind else { return }
+            seek(secondsBehindLive: target)
+            swipeTargetBehind = nil
         }
-        swipeStart = nil
-        lastSwipeSeek = nil
     }
 
     /// Doğrusal değil: kısa kaydırma ince ayar, uzun kaydırma saatler. Siri Remote'ta yüzeyin bir ucundan
@@ -240,6 +243,7 @@ final class PlaybackController: ObservableObject {
 
     func stop() {
         scrubTask?.cancel()
+        swipeCommitTask?.cancel()
         saveWatchTime()
         startTask?.cancel()
         healthTask?.cancel()

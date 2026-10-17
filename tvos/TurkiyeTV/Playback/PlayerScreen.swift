@@ -47,6 +47,25 @@ struct PlayerScreen: View {
                         .allowsHitTesting(false)
                 }
             }
+            .overlay {
+                if playback.isTransportBarVisible && playback.canRewind {
+                    ProgramSegments(programs: guide.programs(for: playback.channel), window: playback.rewindWindow,
+                                    highlightedAt: playback.swipeTargetBehind.map { Date().addingTimeInterval(-$0) })
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: playback.isTransportBarVisible)
+            .overlay {
+                if let target = playback.swipeTargetBehind {
+                    SwipeTargetMarker(targetBehind: target, offset: playback.behindLive - target,
+                                      window: playback.rewindWindow,
+                                      program: guide.program(for: playback.channel, at: Date().addingTimeInterval(-target)))
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: playback.swipeTargetBehind == nil)
             .overlay(alignment: .topTrailing) {
                 if playback.isBehindLive && playback.errorMessage == nil {
                     BehindLiveBadge(seconds: playback.behindLive)
@@ -169,6 +188,110 @@ private struct ChannelBanner: View {
     }
 }
 
+/// AVKit'in zaman çubuğunun ekrandaki yeri (tvOS 26 yerleşiminden ölçüldü): genişliğin %4,6–%95,6'sı,
+/// yüksekliğin %84,3'ü. Çubuğun üstüne çizilenler (program bölümleri, kaydırma hedefi) bunu kullanır.
+private enum TransportBarGeometry {
+    static let start: CGFloat = 0.046
+    static let end: CGFloat = 0.956
+    static let y: CGFloat = 0.843
+
+    /// Canlının `behind` saniye gerisinin çubuktaki x'i; çubuk sunucunun tuttuğu pencerenin tamamıdır.
+    static func x(behind: TimeInterval, window: TimeInterval, width: CGFloat) -> CGFloat {
+        let fraction = 1 - min(max(behind / max(window, 1), 0), 1)
+        return width * (start + (end - start) * fraction)
+    }
+}
+
+/// Zaman çubuğunu programlara göre bölümlere ayırır (YouTube bölümleri gibi): program sınırlarında
+/// çubukta küçük boşluklar; kaydırırken hedefin düştüğü program çubuğun üstünde vurgulanır.
+private struct ProgramSegments: View {
+    let programs: [TVProgram]
+    let window: TimeInterval
+    let highlightedAt: Date?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = geometry.size
+            let now = Date()
+            let windowStart = now.addingTimeInterval(-window)
+            let y = size.height * TransportBarGeometry.y
+            let x = { (date: Date) in
+                TransportBarGeometry.x(behind: now.timeIntervalSince(date), window: window, width: size.width)
+            }
+            ZStack(alignment: .topLeading) {
+                ForEach(programs.filter { $0.start > windowStart && $0.start < now }, id: \.start) { program in
+                    Rectangle()
+                        .fill(.black.opacity(0.85))
+                        .frame(width: 5, height: 16)
+                        .position(x: x(program.start), y: y)
+                }
+                if let highlightedAt, let program = programs.last(where: { $0.contains(highlightedAt) }) {
+                    let startX = x(max(program.start, windowStart))
+                    let endX = x(min(program.end, now))
+                    Capsule()
+                        .fill(Theme.accent)
+                        .frame(width: max(endX - startX, 6), height: 6)
+                        .position(x: (startX + endX) / 2, y: y - 14)
+                }
+            }
+            .frame(width: size.width, height: size.height, alignment: .topLeading)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// Kaydırırken hedefi oynatıcının kendi zaman çubuğunun üstünde gösterir (ikinci bir çubuk çizmez):
+/// çubuğun hedef noktasından yukarı uzanan ince bir çizgi, çubuğun düğme sırasının üstünde saat, fark ve
+/// o saatteki program.
+private struct SwipeTargetMarker: View {
+    let targetBehind: TimeInterval
+    let offset: TimeInterval
+    let window: TimeInterval
+    let program: TVProgram?
+
+    private static let bubbleWidth: CGFloat = 400
+    /// Balonun alt kenarı çubuğun bu kadar üstünde: AVKit'in düğme sırasının üstü.
+    private static let bubbleLift: CGFloat = 130
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = geometry.size
+            let x = TransportBarGeometry.x(behind: targetBehind, window: window, width: size.width)
+            let y = size.height * TransportBarGeometry.y
+            ZStack(alignment: .topLeading) {
+                Capsule()
+                    .fill(Theme.accent)
+                    .frame(width: 5, height: Self.bubbleLift + 16)
+                    .shadow(color: .black.opacity(0.5), radius: 4)
+                    .position(x: x, y: y + 8 - (Self.bubbleLift + 16) / 2)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(targetBehind < 30 ? "Canlı" : ProgramText.clock(Date().addingTimeInterval(-targetBehind)))
+                            .font(.title2.weight(.bold).monospacedDigit())
+                        Text((offset < 0 ? "−" : "+") + DurationText.short(abs(offset)))
+                            .font(.callout.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    if let program {
+                        Text(program.title)
+                            .font(.callout)
+                            .lineLimit(1)
+                    }
+                }
+                .padding(.horizontal, 22)
+                .padding(.vertical, 14)
+                .frame(width: Self.bubbleWidth, alignment: .leading)
+                .glassSurface(cornerRadius: 24)
+                .alignmentGuide(.leading) { _ in -min(max(x - Self.bubbleWidth / 2, 20), size.width - Self.bubbleWidth - 20) }
+                .alignmentGuide(.top) { bubble in -(y - Self.bubbleLift - bubble.height) }
+            }
+            .frame(width: size.width, height: size.height, alignment: .topLeading)
+            .animation(.interactiveSpring(duration: 0.2), value: targetBehind)
+        }
+        .ignoresSafeArea()
+    }
+}
+
 /// Canlının gerisindeyken sağ üstte kalan rozet. Birkaç saniye sonra küçük, nefes alan bir
 /// baloncuğa dönüşür; yeni bir sarmada yeniden açılır.
 private struct BehindLiveBadge: View {
@@ -281,6 +404,7 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
 
         context.coordinator.installZapGestures(on: controller.view)
         context.coordinator.installScrubGestures(on: controller.view)
+        controller.delegate = context.coordinator
         updateTransportBar(controller, coordinator: context.coordinator)
         return controller
     }
@@ -289,19 +413,32 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         updateTransportBar(controller, coordinator: context.coordinator)
     }
 
+    /// Çubukta yalnızca iki menü (artı AVKit'in altyazı/ses düğmesi): Zaman Tüneli ve Kanal.
+    /// Düğme sayısı yayın boyunca değişmez; değişseydi odak başka düğmeye kayardı.
     private func updateTransportBar(_ controller: AVPlayerViewController, coordinator: Coordinator) {
         // Her saniye yeniden kurmak çubuktaki odağı kaçırır
         guard coordinator.transportState != state else { return }
         coordinator.transportState = state
-        let playback = playback
-        let store = store
         var items: [UIMenuElement] = []
-        if !state.timeline.isEmpty {
-            items.append(timelineMenu(state.timeline))
+        if state.canRewind {
+            items.append(timelineMenu(state))
         }
-        if state.canRewind && state.hasGuide {
-            let guide = guide
-            items.append(UIAction(title: "Baştan izle", image: UIImage(systemName: "backward.end.fill")) { _ in
+        items.append(channelMenu(state))
+        controller.transportBarCustomMenuItems = items
+    }
+
+    /// Zaman Tüneli: canlıya dön, programın başı, 10 dk geri/ileri; altında program başlangıçları
+    /// (akış yoksa yarım saatler).
+    private func timelineMenu(_ state: TransportState) -> UIMenu {
+        let playback = playback
+        let guide = guide
+        var controls: [UIMenuElement] = [
+            UIAction(title: "Canlıya dön", image: UIImage(systemName: "dot.radiowaves.left.and.right")) { _ in
+                Task { @MainActor in playback.goLive() }
+            },
+        ]
+        if state.hasGuide {
+            controls.append(UIAction(title: "Programın başına", image: UIImage(systemName: "backward.end.fill")) { _ in
                 Task { @MainActor in
                     let watched = Date().addingTimeInterval(-playback.behindLive)
                     if let program = guide.program(for: playback.channel, at: watched) {
@@ -310,44 +447,16 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
                 }
             })
         }
-        if state.canRewind {
-            items.append(UIAction(title: "10 dk geri", image: UIImage(systemName: "gobackward.10")) { _ in
+        controls += [
+            UIAction(title: "10 dk geri", image: UIImage(systemName: "gobackward.10")) { _ in
                 Task { @MainActor in playback.skip(by: -600) }
-            })
-            items.append(UIAction(title: "10 dk ileri", image: UIImage(systemName: "goforward.10")) { _ in
-                Task { @MainActor in playback.skip(by: 600) }
-            })
-            items.append(UIAction(title: "Canlıya dön", image: UIImage(systemName: "dot.radiowaves.left.and.right")) { _ in
-                Task { @MainActor in playback.goLive() }
-            })
-        }
-        items += [
-            UIAction(title: "Önceki kanal", image: UIImage(systemName: "chevron.down")) { _ in
-                Task { @MainActor in playback.zap(by: -1) }
             },
-            UIAction(title: "Sonraki kanal", image: UIImage(systemName: "chevron.up")) { _ in
-                Task { @MainActor in playback.zap(by: 1) }
+            UIAction(title: "10 dk ileri", image: UIImage(systemName: "goforward.10")) { _ in
+                Task { @MainActor in playback.skip(by: 600) }
             },
         ]
-        if state.canRecall {
-            items.append(UIAction(title: "Son kanal", image: UIImage(systemName: "arrow.uturn.backward")) { _ in
-                Task { @MainActor in playback.recall() }
-            })
-        }
-        items.append(UIAction(title: state.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle",
-                              image: UIImage(systemName: state.isFavorite ? "star.fill" : "star")) { _ in
-            Task { @MainActor in store.toggleFavorite(playback.channel) }
-        })
-        controller.transportBarCustomMenuItems = items
-    }
-
-    private func timelineMenu(_ stops: [TimelineStop]) -> UIMenu {
-        let playback = playback
         let calendar = Calendar.current
-        let live = UIAction(title: "Canlı", image: UIImage(systemName: "dot.radiowaves.left.and.right")) { _ in
-            Task { @MainActor in playback.goLive() }
-        }
-        let actions = stops.map { stop in
+        let stops: [UIMenuElement] = state.timeline.map { stop in
             let clock = ProgramText.clock(stop.date)
             let action = UIAction(title: stop.title.map { "\(clock)  \($0)" } ?? clock) { _ in
                 Task { @MainActor in playback.seek(secondsBehindLive: Date().timeIntervalSince(stop.date)) }
@@ -357,12 +466,41 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
             }
             return action
         }
-        return UIMenu(title: "Zaman Tüneli", image: UIImage(systemName: "clock.arrow.circlepath"),
-                      children: [live] + actions)
+        return UIMenu(title: "Zaman Tüneli", image: UIImage(systemName: "clock.arrow.circlepath"), children: [
+            UIMenu(options: .displayInline, children: controls),
+            UIMenu(title: state.hasGuide ? "Programlar" : "Saatler", options: .displayInline, children: stops),
+        ])
+    }
+
+    /// Kanal: önceki/sonraki, son izlenen ve favori.
+    private func channelMenu(_ state: TransportState) -> UIMenu {
+        let playback = playback
+        let store = store
+        var actions: [UIMenuElement] = [
+            UIAction(title: "Sonraki kanal", image: UIImage(systemName: "chevron.up")) { _ in
+                Task { @MainActor in playback.zap(by: 1) }
+            },
+            UIAction(title: "Önceki kanal", image: UIImage(systemName: "chevron.down")) { _ in
+                Task { @MainActor in playback.zap(by: -1) }
+            },
+        ]
+        if state.canRecall {
+            actions.append(UIAction(title: "Son izlenen kanal", image: UIImage(systemName: "arrow.uturn.backward")) { _ in
+                Task { @MainActor in playback.recall() }
+            })
+        }
+        let favorite = UIAction(title: state.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle",
+                                image: UIImage(systemName: state.isFavorite ? "star.fill" : "star")) { _ in
+            Task { @MainActor in store.toggleFavorite(playback.channel) }
+        }
+        return UIMenu(title: "Kanal", image: UIImage(systemName: "tv"), children: [
+            UIMenu(options: .displayInline, children: actions),
+            UIMenu(options: .displayInline, children: [favorite]),
+        ])
     }
 
     @MainActor
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate, AVPlayerViewControllerDelegate {
         let playback: PlaybackController
         var transportState: TransportState?
         private var swipeRecognizer: UIPanGestureRecognizer?
@@ -403,6 +541,12 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
 
         deinit {
             if let focusObserver { NotificationCenter.default.removeObserver(focusObserver) }
+        }
+
+        nonisolated func playerViewController(_ playerViewController: AVPlayerViewController,
+                                              willTransitionToVisibilityOfTransportBar visible: Bool,
+                                              with coordinator: AVPlayerViewControllerAnimationCoordinator) {
+            MainActor.assumeIsolated { playback.isTransportBarVisible = visible }
         }
 
         @objc private func swipeScrub(_ recognizer: UIPanGestureRecognizer) {
