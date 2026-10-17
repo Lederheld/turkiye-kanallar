@@ -35,6 +35,7 @@ Adres derlemeye girmediyse uygulamadaki **Ayarlar** ekranından da girilebilir
   ve Apple TV aynı ağdayken açılır.
 - **Simülatör:** Xcode'daki Apple TV simülatörüyle de denenebilir. Mac yurt dışındaysa coğrafi
   kısıtlı kanallar açılmaz.
-- **İkon:** Uygulamanın ikonu yok. İstenirse Xcode'da `TurkiyeTV` klasörüne bir Asset Catalog
-  eklenip "App Icon & Top Shelf Image" seti konabilir.
+- **İkon:** 3 katmanlı paralaks ikon ve Top Shelf görselleri `tools/make_icons.py` ile üretilir.
+  Tasarımı değiştirmek için script'i düzenleyip
+  `python3 tvos/tools/make_icons.py tvos/TurkiyeTV/Assets.xcassets` çalıştırın.
 - Uygulama yalnızca kişisel kullanım içindir. Yayın hakları bize ait olmadığından App Store'a gönderilmez.

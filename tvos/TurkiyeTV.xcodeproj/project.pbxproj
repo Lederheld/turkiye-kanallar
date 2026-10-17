@@ -194,6 +194,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7A1000000000000000000002 /* Config.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -216,6 +217,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7A1000000000000000000002 /* Config.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
