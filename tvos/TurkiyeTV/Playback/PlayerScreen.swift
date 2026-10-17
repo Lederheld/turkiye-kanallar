@@ -4,6 +4,9 @@ import SwiftUI
 /// Tam ekran oynatıcı.
 /// - Kanal değişince sol üstte birkaç saniye kanal bilgisi görünür.
 /// - Kumandada sol/sağ basılı tutunca hızlanarak sarar (5, 10, 20, 30, 45 dk, 1 sa…); bırakınca oraya gider.
+/// - Çubuk gizliyken dokunmatik yüzeyde sola/sağa kaydırınca sarar (Netflix/YouTube gibi): uzun kaydırma daha
+///   uzağa gider, art arda kaydırmalar toplanır, durunca hedefe atlar. Çubuk açıkken AVKit'in kendi zaman
+///   çubuğu sarması çalışır.
 /// - Yayın akışı varsa banner, sarma göstergesi ve Zaman Tüneli program adlarını gösterir; "Baştan izle"
 ///   o an izlenen programın başına gider.
 /// - Çubuktaki "Zaman Tüneli" menüsü: program başlangıçları (akış yoksa yarım saatler); tek tıkla o ana gidilir.
@@ -320,6 +323,7 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
 
         context.coordinator.installZapGestures(on: controller.view)
         context.coordinator.installScrubGestures(on: controller.view)
+        controller.delegate = context.coordinator
         updateTransportBar(controller, coordinator: context.coordinator)
         return controller
     }
@@ -401,9 +405,14 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
     }
 
     @MainActor
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate, AVPlayerViewControllerDelegate {
         let playback: PlaybackController
         var transportState: TransportState?
+        /// Çubuk açıkken kaydırma AVKit'indir (düğmeler arasında gezinme, zaman çubuğunda sarma).
+        private var isTransportBarVisible = false
+        private var swipeRecognizer: UIPanGestureRecognizer?
+        private static let arrowPressTypes: Set<Int> = [UIPress.PressType.leftArrow.rawValue,
+                                                         UIPress.PressType.rightArrow.rawValue]
 
         init(playback: PlaybackController) {
             self.playback = playback
@@ -418,6 +427,31 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
                 recognizer.delegate = self
                 view.addGestureRecognizer(recognizer)
             }
+            let swipe = UIPanGestureRecognizer(target: self, action: #selector(swipeScrub))
+            swipe.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+            swipe.delegate = self
+            view.addGestureRecognizer(swipe)
+            swipeRecognizer = swipe
+        }
+
+        @objc private func swipeScrub(_ recognizer: UIPanGestureRecognizer) {
+            guard let view = recognizer.view else { return }
+            switch recognizer.state {
+            case .began:
+                playback.beginSwipeScrub()
+            case .changed:
+                playback.updateSwipeScrub(fraction: recognizer.translation(in: view).x / max(view.bounds.width, 1))
+            case .ended, .cancelled, .failed:
+                playback.endSwipeScrub()
+            default:
+                break
+            }
+        }
+
+        nonisolated func playerViewController(_ playerViewController: AVPlayerViewController,
+                                              willTransitionToVisibilityOfTransportBar visible: Bool,
+                                              with coordinator: AVPlayerViewControllerAnimationCoordinator) {
+            MainActor.assumeIsolated { isTransportBarVisible = visible }
         }
 
         @objc private func scrubBack(_ recognizer: UILongPressGestureRecognizer) { scrub(-1, recognizer.state) }
@@ -445,15 +479,33 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         @objc private func zapUp() { playback.zap(by: 1) }
         @objc private func zapDown() { playback.zap(by: -1) }
 
-        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
-                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            // Basılı tutma bizim: AVKit'in kendi yavaş taraması aynı anda başlamasın
-            !(gestureRecognizer is UILongPressGestureRecognizer)
+        /// Kaydırma yalnızca çubuk gizliyken, geri sarılabilen yayında ve yatay hareketle başlar;
+        /// dikey kaydırma (aşağı: Kanallar paneli) AVKit'te kalır.
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard gestureRecognizer === swipeRecognizer, let pan = swipeRecognizer, let view = pan.view else { return true }
+            let velocity = pan.velocity(in: view)
+            return !isTransportBarVisible && playback.canRewind && abs(velocity.x) > abs(velocity.y) * 1.5
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            // Basılı tutma ve kaydırma bizim: AVKit'in kendi taraması aynı anda başlamasın
+            !(gestureRecognizer is UILongPressGestureRecognizer) && gestureRecognizer !== swipeRecognizer
+        }
+
+        /// AVKit'in yalnızca aynı işi yapan tanıyıcıları bizimkinin sonucunu bekler: sol/sağ basılı tutma
+        /// için sol/sağ tuş tanıyıcıları, kaydırma için kaydırma tanıyıcıları. Hepsini bekletmek
+        /// (önceki hata) AVKit'in zaman çubuğunda kaydırarak sarmasını tamamen kilitliyordu.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-            gestureRecognizer is UILongPressGestureRecognizer && other.view !== gestureRecognizer.view
+            guard other.view !== gestureRecognizer.view else { return false }
+            if gestureRecognizer is UILongPressGestureRecognizer {
+                return other.allowedPressTypes.contains { Self.arrowPressTypes.contains($0.intValue) }
+            }
+            if gestureRecognizer === swipeRecognizer {
+                return other is UIPanGestureRecognizer && !isTransportBarVisible
+            }
+            return false
         }
     }
 }
