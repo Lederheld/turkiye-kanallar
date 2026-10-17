@@ -3,10 +3,8 @@ import SwiftUI
 
 /// Tam ekran oynatıcı.
 /// - Kanal değişince sol üstte birkaç saniye kanal bilgisi görünür.
-/// - Kumandada sol/sağ basılı tutunca hızlanarak sarar (5, 10, 20, 30, 45 dk, 1 sa…); bırakınca oraya gider.
-/// - Çubuk gizliyken dokunmatik yüzeyde sola/sağa kaydırınca sarar (Netflix/YouTube gibi): uzun kaydırma daha
-///   uzağa gider, art arda kaydırmalar toplanır, durunca hedefe atlar. Çubuk açıkken AVKit'in kendi zaman
-///   çubuğu sarması çalışır.
+/// - Kumandada sol/sağ basılı tutunca görüntü hızlanarak sarılır (5, 10, 20, 30, 45 dk, 1 sa…).
+/// - Dokunmatik yüzeyle sarma ve alttaki zaman çubuğu tamamen AVKit'in: tek zaman çubuğu var.
 /// - Yayın akışı varsa banner, sarma göstergesi ve Zaman Tüneli program adlarını gösterir; "Baştan izle"
 ///   o an izlenen programın başına gider.
 /// - Çubuktaki "Zaman Tüneli" menüsü: program başlangıçları (akış yoksa yarım saatler); tek tıkla o ana gidilir.
@@ -57,17 +55,6 @@ struct PlayerScreen: View {
                         .allowsHitTesting(false)
                 }
             }
-            .overlay(alignment: .bottom) {
-                if let offset = playback.scrubOffset {
-                    ScrubTimeline(offset: offset, behindLive: playback.behindLive, window: playback.rewindWindow,
-                                  programs: guide.programs(for: playback.channel))
-                        .padding(.horizontal, 80)
-                        .padding(.bottom, 70)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .allowsHitTesting(false)
-                }
-            }
-            .animation(.smooth(duration: 0.2), value: playback.scrubOffset)
             .overlay {
                 if let message = playback.errorMessage {
                     errorOverlay(message)
@@ -178,87 +165,6 @@ private struct ChannelBanner: View {
         .padding(24)
         .padding(.trailing, 24)
         .glassSurface(cornerRadius: 32)
-    }
-}
-
-/// Sararken altta, oynatıcının zaman çubuğunun yerinde çıkan zaman çizelgesi (YouTube/Netflix gibi):
-/// sol ucu sunucunun tuttuğu en eski an, sağ ucu canlı. Beyaz çizgi izlenen yer, kırmızı tutamaç
-/// bırakınca gidilecek yer; üstünde saat ve o saatteki program. Program başlangıçları küçük çentikler.
-private struct ScrubTimeline: View {
-    let offset: TimeInterval
-    let behindLive: TimeInterval
-    let window: TimeInterval
-    let programs: [TVProgram]
-
-    private static let bubbleWidth: CGFloat = 420
-
-    private var targetBehind: TimeInterval { min(window, max(0, behindLive - offset)) }
-
-    var body: some View {
-        let now = Date()
-        let target = now.addingTimeInterval(-targetBehind)
-        let program = programs.last { $0.contains(target) }
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let position = { (behind: TimeInterval) in width * (1 - behind / max(window, 1)) }
-            let targetX = position(targetBehind)
-            ZStack(alignment: .bottomLeading) {
-                // hedef balonu: tutamacın üstünde, kenarlarda ekrandan taşmaz
-                TargetBubble(target: target, offset: offset, isLive: targetBehind < 30, program: program)
-                    .frame(width: Self.bubbleWidth, alignment: .leading)
-                    .offset(x: min(max(targetX - Self.bubbleWidth / 2, 0), max(0, width - Self.bubbleWidth)), y: -44)
-
-                // çizelge
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.2))
-                    Capsule().fill(.white.opacity(0.55))
-                        .frame(width: position(behindLive))
-                    ForEach(programs.filter { now.timeIntervalSince($0.start) < window && $0.start < now }, id: \.start) { program in
-                        Rectangle()
-                            .fill(.black.opacity(0.6))
-                            .frame(width: 3, height: 14)
-                            .offset(x: position(now.timeIntervalSince(program.start)) - 1.5)
-                    }
-                    Circle()
-                        .fill(Theme.accent)
-                        .frame(width: 30, height: 30)
-                        .shadow(color: .black.opacity(0.4), radius: 6)
-                        .offset(x: targetX - 15)
-                }
-                .frame(height: 14)
-            }
-            .frame(width: width, height: geometry.size.height, alignment: .bottomLeading)
-        }
-        .frame(height: 170)
-        .animation(.interactiveSpring(duration: 0.25), value: offset)
-    }
-
-    private struct TargetBubble: View {
-        let target: Date
-        let offset: TimeInterval
-        let isLive: Bool
-        let program: TVProgram?
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(isLive ? "Canlı" : ProgramText.clock(target))
-                        .font(.title2.weight(.bold).monospacedDigit())
-                    Text((offset < 0 ? "−" : "+") + DurationText.short(abs(offset)))
-                        .font(.callout.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                if let program {
-                    Text(program.title)
-                        .font(.callout)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassSurface(cornerRadius: 24)
-        }
     }
 }
 
@@ -374,7 +280,6 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
 
         context.coordinator.installZapGestures(on: controller.view)
         context.coordinator.installScrubGestures(on: controller.view)
-        controller.delegate = context.coordinator
         updateTransportBar(controller, coordinator: context.coordinator)
         return controller
     }
@@ -456,12 +361,9 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
     }
 
     @MainActor
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate, AVPlayerViewControllerDelegate {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let playback: PlaybackController
         var transportState: TransportState?
-        /// Çubuk açıkken kaydırma AVKit'indir (düğmeler arasında gezinme, zaman çubuğunda sarma).
-        private var isTransportBarVisible = false
-        private var swipeRecognizer: UIPanGestureRecognizer?
         private static let arrowPressTypes: Set<Int> = [UIPress.PressType.leftArrow.rawValue,
                                                          UIPress.PressType.rightArrow.rawValue]
 
@@ -478,31 +380,6 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
                 recognizer.delegate = self
                 view.addGestureRecognizer(recognizer)
             }
-            let swipe = UIPanGestureRecognizer(target: self, action: #selector(swipeScrub))
-            swipe.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
-            swipe.delegate = self
-            view.addGestureRecognizer(swipe)
-            swipeRecognizer = swipe
-        }
-
-        @objc private func swipeScrub(_ recognizer: UIPanGestureRecognizer) {
-            guard let view = recognizer.view else { return }
-            switch recognizer.state {
-            case .began:
-                playback.beginSwipeScrub()
-            case .changed:
-                playback.updateSwipeScrub(fraction: recognizer.translation(in: view).x / max(view.bounds.width, 1))
-            case .ended, .cancelled, .failed:
-                playback.endSwipeScrub()
-            default:
-                break
-            }
-        }
-
-        nonisolated func playerViewController(_ playerViewController: AVPlayerViewController,
-                                              willTransitionToVisibilityOfTransportBar visible: Bool,
-                                              with coordinator: AVPlayerViewControllerAnimationCoordinator) {
-            MainActor.assumeIsolated { isTransportBarVisible = visible }
         }
 
         @objc private func scrubBack(_ recognizer: UILongPressGestureRecognizer) { scrub(-1, recognizer.state) }
@@ -530,31 +407,19 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         @objc private func zapUp() { playback.zap(by: 1) }
         @objc private func zapDown() { playback.zap(by: -1) }
 
-        /// Kaydırma yalnızca çubuk gizliyken, geri sarılabilen yayında ve yatay hareketle başlar;
-        /// dikey kaydırma (aşağı: Kanallar paneli) AVKit'te kalır.
-        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            guard gestureRecognizer === swipeRecognizer, let pan = swipeRecognizer, let view = pan.view else { return true }
-            let velocity = pan.velocity(in: view)
-            return !isTransportBarVisible && playback.canRewind && abs(velocity.x) > abs(velocity.y) * 1.5
-        }
-
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            // Basılı tutma ve kaydırma bizim: AVKit'in kendi taraması aynı anda başlamasın
-            !(gestureRecognizer is UILongPressGestureRecognizer) && gestureRecognizer !== swipeRecognizer
+            // Basılı tutma bizim: AVKit'in kendi yavaş taraması aynı anda başlamasın
+            !(gestureRecognizer is UILongPressGestureRecognizer)
         }
 
-        /// AVKit'in yalnızca aynı işi yapan tanıyıcıları bizimkinin sonucunu bekler: sol/sağ basılı tutma
-        /// için sol/sağ tuş tanıyıcıları, kaydırma için kaydırma tanıyıcıları. Hepsini bekletmek
+        /// AVKit'in yalnızca sol/sağ tuş tanıyıcıları basılı tutmanın sonucunu bekler. Hepsini bekletmek
         /// (önceki hata) AVKit'in zaman çubuğunda kaydırarak sarmasını tamamen kilitliyordu.
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
             guard other.view !== gestureRecognizer.view else { return false }
             if gestureRecognizer is UILongPressGestureRecognizer {
                 return other.allowedPressTypes.contains { Self.arrowPressTypes.contains($0.intValue) }
-            }
-            if gestureRecognizer === swipeRecognizer {
-                return other is UIPanGestureRecognizer && !isTransportBarVisible
             }
             return false
         }

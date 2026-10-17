@@ -12,8 +12,6 @@ final class PlaybackController: ObservableObject {
     @Published private(set) var rewindWindow: TimeInterval = 0
     /// Canlı yayının ne kadar gerisinde izleniyor (saniyeye yuvarlanır; canlıdayken 0).
     @Published private(set) var behindLive: TimeInterval = 0
-    /// Basılı tutarak sarma sürerken bırakınca gidilecek fark (negatif: geri). Sarma yokken nil.
-    @Published private(set) var scrubOffset: TimeInterval?
 
     /// Geri sarma düğmelerinin gösterileceği en kısa pencere.
     static let minimumRewindWindow: TimeInterval = 120
@@ -40,14 +38,9 @@ final class PlaybackController: ObservableObject {
     private var unsavedWatchTime: TimeInterval = 0
     private static let watchTimeSaveInterval: TimeInterval = 30
     private var scrubTask: Task<Void, Never>?
-    /// Kaydırarak sarma: önceki kaydırmalardan biriken fark ve parmak kalkınca bekleyen atlama.
-    private var swipeBase: TimeInterval = 0
-    private var swipeCommitTask: Task<Void, Never>?
-    /// Parmak kalktıktan sonra bu kadar yeni kaydırma gelmezse hedefe atlanır (art arda kaydırmalar toplanır).
-    private static let swipeCommitDelay: Duration = .milliseconds(1100)
     /// Basılı tuttukça büyüyen adımlar; listenin sonundan sonra yarım saat yarım saat artar.
     private static let scrubSteps: [TimeInterval] = [5, 10, 20, 30, 45, 60].map { $0 * 60 }
-    private static let scrubStepInterval: Duration = .milliseconds(700)
+    private static let scrubStepInterval: Duration = .milliseconds(800)
 
     init(channel: Channel, store: PlaylistStore) {
         self.channel = channel
@@ -122,67 +115,29 @@ final class PlaybackController: ObservableObject {
 
     // MARK: - Basılı tutarak sarma
 
-    /// Kumandada sol/sağ basılı tutulunca başlar: önce 5 dk, sonra 10, 20, 30, 45 dk, 1 sa, 1,5 sa…
+    /// Kumandada sol/sağ basılı tutulunca görüntü adım adım ilerler: 5 dk, sonra 10, 20, 30, 45 dk,
+    /// 1 sa, 1,5 sa… (başladığı yere göre). Ayrı bir gösterge yok: oynatıcının kendi zaman çubuğu ve
+    /// "Canlının … gerisinde" rozeti konumu gösterir. Bırakınca olduğu yerde kalır.
     func beginScrub(direction: Int) {
         guard canRewind else { return }
         scrubTask?.cancel()
+        let start = player.currentTime().seconds
         scrubTask = Task {
             var step = 0
             while !Task.isCancelled {
                 let magnitude = step < Self.scrubSteps.count
                     ? Self.scrubSteps[step]
                     : Self.scrubSteps[Self.scrubSteps.count - 1] + Double(step - Self.scrubSteps.count + 1) * 1800
-                scrubOffset = clampedScrubOffset(Double(direction) * magnitude)
+                seek { _, _ in start + Double(direction) * magnitude }
                 step += 1
                 try? await Task.sleep(for: Self.scrubStepInterval)
             }
         }
     }
 
-    /// Tuş bırakılınca gösterilen hedefe gider.
     func endScrub() {
         scrubTask?.cancel()
         scrubTask = nil
-        if let scrubOffset, scrubOffset != 0 {
-            skip(by: scrubOffset)
-        }
-        scrubOffset = nil
-    }
-
-    // MARK: - Kaydırarak sarma
-
-    func beginSwipeScrub() {
-        guard canRewind else { return }
-        swipeCommitTask?.cancel()
-        swipeBase = scrubOffset ?? 0
-    }
-
-    /// `fraction`: yüzey genişliğine göre kaydırma (sola negatif). Doğrusal değil: kısa kaydırma birkaç
-    /// dakika (0,1 → ~5 dk), yarım kaydırma ~50 dk, tam kaydırma ~2,5 saat.
-    func updateSwipeScrub(fraction: Double) {
-        guard canRewind else { return }
-        let magnitude = min(abs(fraction), 1)
-        let minutes = (40 * magnitude * (1 + 3 * magnitude)).rounded()
-        let offset = swipeBase + (fraction < 0 ? -minutes : minutes) * 60
-        scrubOffset = clampedScrubOffset(offset)
-    }
-
-    func endSwipeScrub() {
-        guard scrubOffset != nil else { return }
-        swipeCommitTask?.cancel()
-        swipeCommitTask = Task {
-            try? await Task.sleep(for: Self.swipeCommitDelay)
-            guard !Task.isCancelled else { return }
-            endScrub()
-        }
-    }
-
-    /// Sarma sunucunun tuttuğu pencereden ve canlıdan öteye geçmez.
-    private func clampedScrubOffset(_ offset: TimeInterval) -> TimeInterval {
-        guard let item = player.currentItem, let range = item.seekableTimeRanges.last?.timeRangeValue else { return 0 }
-        let current = player.currentTime().seconds
-        let liveEdge = range.end.seconds - (liveLatency ?? Self.liveOffset(of: item))
-        return min(max(offset, range.start.seconds + 1 - current), max(0, liveEdge - current))
     }
 
     /// Hedef, oynatma konumu ve canlı uçtan hesaplanır; sunucunun tuttuğu pencereye sıkıştırılır.
@@ -240,7 +195,6 @@ final class PlaybackController: ObservableObject {
 
     func stop() {
         scrubTask?.cancel()
-        swipeCommitTask?.cancel()
         saveWatchTime()
         startTask?.cancel()
         healthTask?.cancel()
