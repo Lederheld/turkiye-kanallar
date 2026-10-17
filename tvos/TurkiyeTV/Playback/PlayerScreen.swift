@@ -6,12 +6,12 @@ import SwiftUI
 /// - Kumandada sol/sağ basılı tutunca hızlanarak sarar (5, 10, 20, 30, 45 dk, 1 sa…); bırakınca oraya gider.
 /// - Yayın akışı varsa banner, sarma göstergesi ve Zaman Tüneli program adlarını gösterir; "Baştan izle"
 ///   o an izlenen programın başına gider.
+/// - Çubuktaki "Zaman Tüneli" menüsü: program başlangıçları (akış yoksa yarım saatler); tek tıkla o ana gidilir.
 /// - Kanal +/- tuşları (CEC/IR kumandalar) kanal değiştirir. Ok tuşları AVKit'te kalır (aşağı: Kanallar paneli).
 /// - Oynatma çubuğunda önceki/sonraki/son kanal ve favori düğmeleri var.
-/// - Aşağı kaydırınca açılan panelde "Kanallar" sekmesi var.
+/// - Aşağı kaydırınca açılan panelde yalnızca "Kanallar" var: tek sekme olunca odak doğrudan kanallara iner.
 /// - Yayın sunucuda geri sarılabilir süre tutuyorsa çubukta 10 dk geri/ileri ve "Canlıya dön" düğmeleri çıkar.
 ///   Canlıdayken de görünürler: düğmeler kaybolup gelirse odak başka düğmeye (ör. sonraki kanal) kayar.
-///   Uzun geri sarma için aşağı kaydırınca "Zaman Tüneli" sekmesi: 15 dakikalık adımlarla tek tıkla o saate gidilir.
 struct PlayerScreen: View {
     @ObservedObject var store: PlaylistStore
     @ObservedObject var guide: ProgramGuide
@@ -31,7 +31,8 @@ struct PlayerScreen: View {
                                           state: TransportState(isFavorite: store.isFavorite(playback.channel),
                                                                 canRecall: playback.previousChannel != nil,
                                                                 canRewind: playback.canRewind,
-                                                                hasGuide: !guide.programs(for: playback.channel).isEmpty))
+                                                                hasGuide: !guide.programs(for: playback.channel).isEmpty,
+                                                                timeline: timelineStops))
             .ignoresSafeArea()
             .overlay(alignment: .topLeading) {
                 if showsBanner && playback.errorMessage == nil {
@@ -77,6 +78,26 @@ struct PlayerScreen: View {
                 playback.stop()
             }
             .onChange(of: playback.channel.name) { _, _ in showBanner() }
+    }
+
+    /// Zaman Tüneli durakları, yeniden eskiye: penceredeki program başlangıçları; akış yoksa yarım saatler.
+    /// Değerler yalnızca yeni program ya da yarım saat girdiğinde değişir, menü de o zaman yeniden kurulur.
+    private var timelineStops: [TimelineStop] {
+        guard playback.canRewind else { return [] }
+        let now = Date()
+        let windowStart = now.addingTimeInterval(-playback.rewindWindow)
+        let programs = guide.programs(for: playback.channel).filter { $0.start >= windowStart && $0.start < now }
+        if !programs.isEmpty {
+            return programs.reversed().map { TimelineStop(date: $0.start, title: $0.title) }
+        }
+        let step: TimeInterval = 30 * 60
+        var date = Date(timeIntervalSince1970: (now.timeIntervalSince1970 / step).rounded(.down) * step)
+        var stops: [TimelineStop] = []
+        while date >= windowStart {
+            stops.append(TimelineStop(date: date, title: nil))
+            date -= step
+        }
+        return stops
     }
 
     /// Ekrandaki görüntünün yayınlandığı an (geri sarıldıysa geçmişte).
@@ -266,6 +287,12 @@ struct TransportState: Equatable {
     var canRecall: Bool
     var canRewind: Bool
     var hasGuide: Bool
+    var timeline: [TimelineStop]
+}
+
+struct TimelineStop: Equatable {
+    let date: Date
+    let title: String?
 }
 
 private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable {
@@ -287,12 +314,9 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         let channelPanel = UIHostingController(rootView: ChannelStripView(store: store, playback: playback))
         channelPanel.title = "Kanallar"
         channelPanel.preferredContentSize = CGSize(width: 0, height: Self.channelPanelHeight)
-        context.coordinator.channelPanel = channelPanel
 
-        let rewindPanel = UIHostingController(rootView: RewindStripView(playback: playback, guide: guide))
-        rewindPanel.title = "Zaman Tüneli"
-        rewindPanel.preferredContentSize = CGSize(width: 0, height: Self.channelPanelHeight)
-        context.coordinator.rewindPanel = rewindPanel
+        // Tek sekme: aşağı kaydırınca odak sekme başlığına değil, doğrudan kanallara iner
+        controller.customInfoViewControllers = [channelPanel]
 
         context.coordinator.installZapGestures(on: controller.view)
         context.coordinator.installScrubGestures(on: controller.view)
@@ -308,11 +332,12 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         // Her saniye yeniden kurmak çubuktaki odağı kaçırır
         guard coordinator.transportState != state else { return }
         coordinator.transportState = state
-        controller.customInfoViewControllers = [coordinator.channelPanel, state.canRewind ? coordinator.rewindPanel : nil]
-            .compactMap { $0 }
         let playback = playback
         let store = store
         var items: [UIMenuElement] = []
+        if !state.timeline.isEmpty {
+            items.append(timelineMenu(state.timeline))
+        }
         if state.canRewind && state.hasGuide {
             let guide = guide
             items.append(UIAction(title: "Baştan izle", image: UIImage(systemName: "backward.end.fill")) { _ in
@@ -355,12 +380,30 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         controller.transportBarCustomMenuItems = items
     }
 
+    private func timelineMenu(_ stops: [TimelineStop]) -> UIMenu {
+        let playback = playback
+        let calendar = Calendar.current
+        let live = UIAction(title: "Canlı", image: UIImage(systemName: "dot.radiowaves.left.and.right")) { _ in
+            Task { @MainActor in playback.goLive() }
+        }
+        let actions = stops.map { stop in
+            let clock = ProgramText.clock(stop.date)
+            let action = UIAction(title: stop.title.map { "\(clock)  \($0)" } ?? clock) { _ in
+                Task { @MainActor in playback.seek(secondsBehindLive: Date().timeIntervalSince(stop.date)) }
+            }
+            if !calendar.isDateInToday(stop.date) {
+                action.subtitle = "Dün"
+            }
+            return action
+        }
+        return UIMenu(title: "Zaman Tüneli", image: UIImage(systemName: "clock.arrow.circlepath"),
+                      children: [live] + actions)
+    }
+
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let playback: PlaybackController
         var transportState: TransportState?
-        var channelPanel: UIViewController?
-        var rewindPanel: UIViewController?
 
         init(playback: PlaybackController) {
             self.playback = playback
@@ -472,133 +515,5 @@ private struct ChannelStripView: View {
     private func focusCurrent(_ proxy: ScrollViewProxy) {
         proxy.scrollTo(playback.channel.name, anchor: .center)
         focusedName = playback.channel.name
-    }
-}
-
-/// Zaman Tüneli: yayın akışı varsa programların başlangıçları, yoksa 15 dakikalık adımlar; canlıdan geriye.
-/// Sağa kaydırdıkça geçmişe gidilir, açılınca odak o an izlenen konumdadır.
-private struct RewindStripView: View {
-    @ObservedObject var playback: PlaybackController
-    @ObservedObject var guide: ProgramGuide
-    @FocusState private var focusedStop: Int?
-
-    private static let step: TimeInterval = 15 * 60
-
-    private struct Stop: Identifiable {
-        let id: Int            // canlıdan kaçıncı durak (0: canlı)
-        let secondsBehind: TimeInterval
-        let date: Date
-        var program: TVProgram?
-    }
-
-    private func stops(now: Date) -> [Stop] {
-        let window = playback.rewindWindow
-        let windowStart = now.addingTimeInterval(-window)
-        var result = [Stop(id: 0, secondsBehind: 0, date: now, program: guide.program(for: playback.channel, at: now))]
-        let programs = guide.programs(for: playback.channel)
-            .filter { $0.end > windowStart && $0.start < now }
-            .reversed()
-        if !programs.isEmpty {
-            // başı pencerenin dışında kalan program, pencerenin başından oynar
-            for program in programs {
-                let start = max(program.start, windowStart)
-                result.append(Stop(id: result.count, secondsBehind: now.timeIntervalSince(start), date: start, program: program))
-            }
-            return result
-        }
-        // ilk durak saatin son çeyreği (20:47 → 20:45), sonra 15'er dakika geriye
-        var date = Date(timeIntervalSince1970: (now.timeIntervalSince1970 / Self.step).rounded(.down) * Self.step)
-        while now.timeIntervalSince(date) <= window {
-            result.append(Stop(id: result.count, secondsBehind: now.timeIntervalSince(date), date: date))
-            date -= Self.step
-        }
-        return result
-    }
-
-    var body: some View {
-        let now = Date()
-        let stops = stops(now: now)
-        let watched = now.addingTimeInterval(-playback.behindLive)
-        let currentID = playback.behindLive == 0 ? 0
-            : (stops.dropFirst().first { $0.program?.contains(watched) ?? false }
-                ?? stops.min { abs($0.secondsBehind - playback.behindLive) < abs($1.secondsBehind - playback.behindLive) })?.id
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 28) {
-                    ForEach(stops) { stop in
-                        Button { playback.seek(secondsBehindLive: stop.secondsBehind) } label: {
-                            StopLabel(stop: stop, now: now, isCurrent: stop.id == currentID)
-                        }
-                        .buttonStyle(.card)
-                        .focused($focusedStop, equals: stop.id)
-                        .id(stop.id)
-                    }
-                }
-                .padding(.horizontal, 60)
-                .padding(.vertical, 40)
-            }
-            .scrollClipDisabled()
-            .defaultFocus($focusedStop, currentID)
-            .onAppear {
-                proxy.scrollTo(currentID, anchor: .center)
-                focusedStop = currentID
-            }
-        }
-    }
-
-    private struct StopLabel: View {
-        let stop: Stop
-        let now: Date
-        let isCurrent: Bool
-
-        var body: some View {
-            VStack(alignment: stop.program == nil ? .center : .leading, spacing: 6) {
-                if stop.id == 0 {
-                    Label("Canlı", systemImage: "dot.radiowaves.left.and.right")
-                        .font(.title3.weight(.bold))
-                        .labelStyle(LiveLabelStyle())
-                } else {
-                    Text(stop.date, format: .dateTime.hour().minute())
-                        .font(.title2.weight(.bold).monospacedDigit())
-                }
-                if let program = stop.program {
-                    Text(program.title)
-                        .font(.callout.weight(.semibold))
-                }
-                Text(caption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.horizontal, 20)
-            .frame(width: stop.program == nil ? 240 : 320, height: 160,
-                   alignment: stop.program == nil ? .center : .leading)
-            .overlay(alignment: .bottom) {
-                if isCurrent {
-                    Capsule()
-                        .fill(Theme.accent)
-                        .frame(height: 6)
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 10)
-                }
-            }
-        }
-
-        private var caption: String {
-            if stop.id == 0 { return "Şu an" }
-            let ago = DurationText.short(stop.secondsBehind) + " önce"
-            return Calendar.current.isDate(stop.date, inSameDayAs: now) ? ago : "Dün · " + ago
-        }
-    }
-
-    /// Canlı simgesi vurgu renginde.
-    private struct LiveLabelStyle: LabelStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            HStack(spacing: 10) {
-                configuration.icon.foregroundStyle(Theme.accent)
-                configuration.title
-            }
-        }
     }
 }

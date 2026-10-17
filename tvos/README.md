@@ -13,10 +13,10 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
 - **Geri sarma:** kumandada sol/sağ basılı tutunca hızlanarak sarar (5, 10, 20, 30, 45 dk, 1 sa, sonra
   yarım saat yarım saat); ekranda hedef saat görünür, bırakınca oraya gider. Yayının sunucuda tuttuğu süre kadar (TRT 1'de yaklaşık 24 saat, çoğu özel kanalda
   birkaç dakika) 10 dk geri/ileri ve **Canlıya dön** düğmeleri; geri kalındığında sağ üstte
-  "Canlının … gerisinde" rozeti. Uzun geri sarma için aşağı kaydırınca **Zaman Tüneli** sekmesi:
-  canlıdan geriye 15 dakikalık adımlar, tek tıkla o saate gidilir. Uygulama kendisi kayıt yapmaz
+  "Canlının … gerisinde" rozeti. Uzun geri sarma için çubuktaki **Zaman Tüneli** menüsü:
+  program başlangıçları (akış yoksa yarım saatler), tek tıkla o ana gidilir. Uygulama kendisi kayıt yapmaz
 - **Yayın akışı:** epgshare01 ve open-epg'den (XMLTV) 6 saatte bir indirilir, dün önbellekte tutulur.
-  Kartlarda ve kanal bilgisinde o an yayındaki program; sararken hedefteki program; Zaman Tüneli'nde
+  Kartlarda ve kanal bilgisinde o an yayındaki program; sararken hedefteki program; Zaman Tüneli menüsünde
   programların başlangıçları; oynatma çubuğunda **Baştan izle**. Canlının gerisindeyken sağ üstteki
   rozet birkaç saniye sonra küçük bir baloncuğa dönüşür
 - **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →
