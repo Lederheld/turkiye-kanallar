@@ -57,12 +57,13 @@ struct PlayerScreen: View {
                         .allowsHitTesting(false)
                 }
             }
-            .overlay {
+            .overlay(alignment: .bottom) {
                 if let offset = playback.scrubOffset {
-                    ScrubOverlay(offset: offset, behindLive: playback.behindLive,
-                                 program: guide.program(for: playback.channel,
-                                                        at: Date().addingTimeInterval(-max(0, playback.behindLive - offset))))
-                        .transition(.scale(scale: 0.9).combined(with: .opacity))
+                    ScrubTimeline(offset: offset, behindLive: playback.behindLive, window: playback.rewindWindow,
+                                  programs: guide.programs(for: playback.channel))
+                        .padding(.horizontal, 80)
+                        .padding(.bottom, 70)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                         .allowsHitTesting(false)
                 }
             }
@@ -180,34 +181,84 @@ private struct ChannelBanner: View {
     }
 }
 
-/// Basılı tutarak sararken ortada çıkan hedef göstergesi.
-private struct ScrubOverlay: View {
+/// Sararken altta, oynatıcının zaman çubuğunun yerinde çıkan zaman çizelgesi (YouTube/Netflix gibi):
+/// sol ucu sunucunun tuttuğu en eski an, sağ ucu canlı. Beyaz çizgi izlenen yer, kırmızı tutamaç
+/// bırakınca gidilecek yer; üstünde saat ve o saatteki program. Program başlangıçları küçük çentikler.
+private struct ScrubTimeline: View {
     let offset: TimeInterval
     let behindLive: TimeInterval
-    let program: TVProgram?
+    let window: TimeInterval
+    let programs: [TVProgram]
+
+    private static let bubbleWidth: CGFloat = 420
+
+    private var targetBehind: TimeInterval { min(window, max(0, behindLive - offset)) }
 
     var body: some View {
-        let targetBehind = max(0, behindLive - offset)
-        VStack(spacing: 14) {
-            Label(DurationText.short(abs(offset)) + (offset < 0 ? " geri" : " ileri"),
-                  systemImage: offset < 0 ? "backward.fill" : "forward.fill")
-                .font(.system(size: 64, weight: .bold).monospacedDigit())
-                .contentTransition(.numericText())
-            Text(targetBehind < 30
-                 ? "Bırakınca canlı yayına döner"
-                 : "Bırakınca \(ProgramText.clock(Date().addingTimeInterval(-targetBehind))) yayınına gider")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            if let program {
-                Label("\(program.title) · \(ProgramText.timeRange(program))", systemImage: "tv")
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(1)
-                    .contentTransition(.opacity)
+        let now = Date()
+        let target = now.addingTimeInterval(-targetBehind)
+        let program = programs.last { $0.contains(target) }
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let position = { (behind: TimeInterval) in width * (1 - behind / max(window, 1)) }
+            let targetX = position(targetBehind)
+            ZStack(alignment: .bottomLeading) {
+                // hedef balonu: tutamacın üstünde, kenarlarda ekrandan taşmaz
+                TargetBubble(target: target, offset: offset, isLive: targetBehind < 30, program: program)
+                    .frame(width: Self.bubbleWidth, alignment: .leading)
+                    .offset(x: min(max(targetX - Self.bubbleWidth / 2, 0), max(0, width - Self.bubbleWidth)), y: -44)
+
+                // çizelge
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.2))
+                    Capsule().fill(.white.opacity(0.55))
+                        .frame(width: position(behindLive))
+                    ForEach(programs.filter { now.timeIntervalSince($0.start) < window && $0.start < now }, id: \.start) { program in
+                        Rectangle()
+                            .fill(.black.opacity(0.6))
+                            .frame(width: 3, height: 14)
+                            .offset(x: position(now.timeIntervalSince(program.start)) - 1.5)
+                    }
+                    Circle()
+                        .fill(Theme.accent)
+                        .frame(width: 30, height: 30)
+                        .shadow(color: .black.opacity(0.4), radius: 6)
+                        .offset(x: targetX - 15)
+                }
+                .frame(height: 14)
             }
+            .frame(width: width, height: geometry.size.height, alignment: .bottomLeading)
         }
-        .padding(.horizontal, 60)
-        .padding(.vertical, 40)
-        .glassSurface(cornerRadius: 44)
+        .frame(height: 170)
+        .animation(.interactiveSpring(duration: 0.25), value: offset)
+    }
+
+    private struct TargetBubble: View {
+        let target: Date
+        let offset: TimeInterval
+        let isLive: Bool
+        let program: TVProgram?
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(isLive ? "Canlı" : ProgramText.clock(target))
+                        .font(.title2.weight(.bold).monospacedDigit())
+                    Text((offset < 0 ? "−" : "+") + DurationText.short(abs(offset)))
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if let program {
+                    Text(program.title)
+                        .font(.callout)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassSurface(cornerRadius: 24)
+        }
     }
 }
 
