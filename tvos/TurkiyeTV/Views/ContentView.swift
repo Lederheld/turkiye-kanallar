@@ -4,77 +4,58 @@ struct ContentView: View {
     @EnvironmentObject private var store: PlaylistStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var playingChannel: Channel?
-    @State private var showingSettings = false
+    @State private var didResume = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 56) {
-                header
-                if store.channels.isEmpty {
-                    emptyState
-                } else {
-                    if !store.favoriteChannels.isEmpty {
-                        ChannelSection(title: "Favoriler", channels: store.favoriteChannels, onSelect: play)
-                    }
-                    ForEach(store.sections) { section in
-                        ChannelSection(title: section.title, channels: section.channels, onSelect: play)
-                    }
-                }
-            }
-            .padding(.vertical, 20)
+        TabView {
+            HomeView()
+                .tabItem { Label("Ana Sayfa", systemImage: "house") }
+            BrowseView()
+                .tabItem { Label("Kanallar", systemImage: "square.grid.2x2") }
+            SearchView()
+                .tabItem { Label("Ara", systemImage: "magnifyingglass") }
+            SettingsView(store: store)
+                .tabItem { Label("Ayarlar", systemImage: "gearshape") }
         }
+        .background(AppBackground())
+        .environment(\.playChannel, PlayChannelAction { playingChannel = $0 })
         .fullScreenCover(item: $playingChannel) { channel in
             PlayerScreen(channel: channel, store: store)
-        }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView(store: store)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await store.reloadIfStale() }
             }
         }
+        // Bir TV gibi: açılışta son izlenen kanal kaldığı yerden başlar
+        .onChange(of: store.channels.isEmpty, initial: true) { _, isEmpty in
+            guard !isEmpty, !didResume else { return }
+            didResume = true
+            if store.resumesLastChannel, let last = store.lastChannel {
+                playingChannel = last
+            }
+        }
     }
+}
 
-    private var header: some View {
-        HStack(spacing: 32) {
-            Text("Türkiye TV")
-                .font(.largeTitle.bold())
-            Spacer()
+/// Liste boşken ya da yüklenirken tüm sekmelerde aynı görünüm.
+struct EmptyPlaylistView: View {
+    @EnvironmentObject private var store: PlaylistStore
+
+    var body: some View {
+        Group {
             if store.isLoading {
-                ProgressView()
-            }
-            Button {
-                Task { await store.reload() }
-            } label: {
-                Label("Yenile", systemImage: "arrow.clockwise")
-            }
-            Button {
-                showingSettings = true
-            } label: {
-                Label("Ayarlar", systemImage: "gearshape")
+                ProgressView("Kanallar yükleniyor…")
+            } else {
+                ContentUnavailableView {
+                    Label("Kanal listesi yok", systemImage: "tv.slash")
+                } description: {
+                    Text(store.lastError ?? "Liste henüz indirilmedi. Ayarlar sekmesinden adresi kontrol edin.")
+                } actions: {
+                    Button("Tekrar dene") { Task { await store.reload() } }
+                }
             }
         }
-    }
-
-    @ViewBuilder
-    private var emptyState: some View {
-        if store.isLoading {
-            ProgressView("Kanallar yükleniyor…")
-                .frame(maxWidth: .infinity, minHeight: 400)
-        } else {
-            ContentUnavailableView {
-                Label("Kanal listesi yok", systemImage: "tv.slash")
-            } description: {
-                Text(store.lastError ?? "Liste henüz indirilmedi.")
-            } actions: {
-                Button("Ayarlar") { showingSettings = true }
-            }
-            .frame(maxWidth: .infinity, minHeight: 400)
-        }
-    }
-
-    private func play(_ channel: Channel) {
-        playingChannel = channel
+        .frame(maxWidth: .infinity, minHeight: 600)
     }
 }

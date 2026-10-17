@@ -12,15 +12,25 @@ enum PlaylistError: LocalizedError {
     }
 }
 
-/// Gist'teki playlist'i indirir, önbelleğe alır ve favorileri tutar.
+/// Gist'teki playlist'i indirir, önbelleğe alır; favorileri, son izlenenleri ve ayarları tutar.
 @MainActor
 final class PlaylistStore: ObservableObject {
-    @Published private(set) var channels: [Channel] = []
+    @Published private(set) var channels: [Channel] = [] {
+        didSet { numbers = Dictionary(channels.enumerated().map { ($1.name, $0 + 1) }, uniquingKeysWith: { a, _ in a }) }
+    }
     @Published private(set) var isLoading = false
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var lastError: String?
     @Published private(set) var favoriteNames: [String]
     @Published private(set) var customPlaylistURL: String
+    @Published private(set) var recentNames: [String]
+    @Published var resumesLastChannel: Bool {
+        didSet { defaults.set(resumesLastChannel, forKey: Keys.resumeLastChannel) }
+    }
+
+    /// Listedeki sırası (1'den başlar); kumandadan kanal değiştirirken ve kartlarda gösterilir.
+    private(set) var numbers: [String: Int] = [:]
+    private static let recentLimit = 12
 
     /// DMAX/TLC/Beyaz TV linkleri 30 dk'da bir yenileniyor; bundan eski liste tazelenir.
     private static let staleInterval: TimeInterval = 10 * 60
@@ -29,6 +39,8 @@ final class PlaylistStore: ObservableObject {
     private enum Keys {
         static let favorites = "favoriteChannelNames"
         static let customURL = "customPlaylistURL"
+        static let recents = "recentChannelNames"
+        static let resumeLastChannel = "resumesLastChannel"
     }
 
     private let defaults = UserDefaults.standard
@@ -37,6 +49,8 @@ final class PlaylistStore: ObservableObject {
     init() {
         favoriteNames = defaults.stringArray(forKey: Keys.favorites) ?? []
         customPlaylistURL = defaults.string(forKey: Keys.customURL) ?? ""
+        recentNames = defaults.stringArray(forKey: Keys.recents) ?? []
+        resumesLastChannel = defaults.object(forKey: Keys.resumeLastChannel) as? Bool ?? true
         loadCachedPlaylist()
     }
 
@@ -141,15 +155,36 @@ final class PlaylistStore: ObservableObject {
         channels.first { $0.name == name }
     }
 
-    var sections: [ChannelGroup] {
-        var order: [String] = []
-        var channelsByGroup: [String: [Channel]] = [:]
-        for channel in channels {
-            let title = channel.group ?? "Tüm Kanallar"
-            if channelsByGroup[title] == nil { order.append(title) }
-            channelsByGroup[title, default: []].append(channel)
+    func number(of channel: Channel) -> Int? {
+        numbers[channel.name]
+    }
+
+    /// Kategoriler sabit sırada; boş olanlar atlanır.
+    var categorySections: [(category: ChannelCategory, channels: [Channel])] {
+        let grouped = Dictionary(grouping: channels, by: \.category)
+        return ChannelCategory.allCases.compactMap { category in
+            grouped[category].map { (category, $0) }
         }
-        return order.map { ChannelGroup(title: $0, channels: channelsByGroup[$0] ?? []) }
+    }
+
+    /// Listede `offset` kadar ilerideki kanal; uçlarda başa/sona sarar.
+    func neighbor(of channel: Channel, offset: Int) -> Channel? {
+        guard !channels.isEmpty, let index = channels.firstIndex(where: { $0.name == channel.name }) else {
+            return channels.first
+        }
+        let count = channels.count
+        return channels[((index + offset) % count + count) % count]
+    }
+
+    /// Ada (Türkçe karakter ve büyük/küçük harf duyarsız) ya da kanal numarasına göre arar.
+    func search(_ query: String) -> [Channel] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return [] }
+        if let number = Int(trimmed) {
+            return channels.filter { numbers[$0.name] == number }
+        }
+        let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return channels.filter { $0.name.range(of: trimmed, options: options, locale: Locale(identifier: "tr_TR")) != nil }
     }
 
     // MARK: - Favoriler
@@ -169,5 +204,27 @@ final class PlaylistStore: ObservableObject {
             favoriteNames.append(channel.name)
         }
         defaults.set(favoriteNames, forKey: Keys.favorites)
+    }
+
+    // MARK: - Son izlenenler
+
+    var recentChannels: [Channel] {
+        recentNames.compactMap(channel(named:))
+    }
+
+    var lastChannel: Channel? {
+        recentChannels.first
+    }
+
+    func recordWatched(_ channel: Channel) {
+        recentNames.removeAll { $0 == channel.name }
+        recentNames.insert(channel.name, at: 0)
+        recentNames = Array(recentNames.prefix(Self.recentLimit))
+        defaults.set(recentNames, forKey: Keys.recents)
+    }
+
+    func clearRecents() {
+        recentNames = []
+        defaults.removeObject(forKey: Keys.recents)
     }
 }

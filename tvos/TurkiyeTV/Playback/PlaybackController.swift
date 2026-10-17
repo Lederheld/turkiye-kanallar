@@ -5,6 +5,8 @@ import AVFoundation
 final class PlaybackController: ObservableObject {
     @Published private(set) var channel: Channel
     @Published private(set) var errorMessage: String?
+    /// Bir önceki izlenen kanal ("son kanal" tuşu için).
+    @Published private(set) var previousChannel: Channel?
 
     let player = AVPlayer()
 
@@ -20,6 +22,9 @@ final class PlaybackController: ObservableObject {
     }
 
     func play(_ channel: Channel) {
+        if channel.name != self.channel.name {
+            previousChannel = self.channel
+        }
         self.channel = channel
         errorMessage = nil
         retriedAfterFailure = false
@@ -28,6 +33,20 @@ final class PlaybackController: ObservableObject {
 
     func retry() {
         play(channel)
+    }
+
+    /// Listede bir sonraki (+1) ya da önceki (-1) kanala geçer.
+    func zap(by offset: Int) {
+        if let next = store.neighbor(of: channel, offset: offset) {
+            play(next)
+        }
+    }
+
+    /// Bir önceki izlenen kanala döner.
+    func recall() {
+        if let previousChannel {
+            play(previousChannel)
+        }
     }
 
     func stop() {
@@ -82,6 +101,7 @@ final class PlaybackController: ObservableObject {
             guard isCurrentItem(itemID) else { return }
             retriedAfterFailure = false
             errorMessage = nil
+            store.recordWatched(channel)
         case .failed:
             handleFailure(error, itemID: itemID)
         default:

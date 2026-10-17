@@ -2,8 +2,14 @@
 
 Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uygulaması (SwiftUI + AVPlayer).
 
-- Kanal ızgarası, uzun basışla favorilere ekleme (favoriler en üstte)
-- Oynatırken kumandada aşağı kaydırınca **Kanallar** sekmesinden kanal değiştirme
+- **Ana Sayfa:** son izlenen kanalla büyük kart, Favoriler, Son İzlenenler ve kategori rafları
+  (Ulusal, Haber, Ekonomi, Spor, Çocuk, Belgesel ve Yaşam, Müzik). Kategori kanal adından çıkarılır
+- **Kanallar:** tüm kanallar numaralı ızgarada. **Ara:** ada ya da kanal numarasına göre arama
+- Uzun basışla favorilere ekleme
+- Bir TV gibi açılışta son kanal kaldığı yerden başlar (Ayarlar'dan kapatılabilir)
+- Oynatırken: kanal değişince kanal bilgisi görünür; oynatma çubuğu gizliyken kumandada yukarı/aşağı
+  tıklama (ya da CEC kumandadaki kanal +/-) kanal değiştirir; çubukta önceki/sonraki/son kanal ve
+  favori düğmeleri; aşağı kaydırınca **Kanallar** şeridi
 - Playlist'teki `#EXTVLCOPT` User-Agent / Referer header'larını yayına ekler
 - Liste 10 dakikadan eskiyse oynatmadan önce tazelenir. Yayın hata verirse liste yenilenip
   bir kez daha denenir (DMAX/TLC/Beyaz TV'nin süreli linkleri için)

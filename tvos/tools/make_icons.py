@@ -7,118 +7,159 @@ import math
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 SS = 4  # süper örnekleme (kenar yumuşatma)
-RED_TOP = (214, 26, 48)
-RED_BOTTOM = (140, 8, 28)
-WHITE = (255, 255, 255, 255)
-SCREEN = (24, 24, 30, 255)
-FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 INFO = {"author": "xcode", "version": 1}
+
+# Koyu zemin, ortada ekranın rengini yansıtan yumuşak bir hale; ekran canlı bir degrade.
+BG_TOP = (30, 30, 38)
+BG_BOTTOM = (8, 8, 12)
+HALO = (255, 50, 80)
+SCREEN_STOPS = [(0.0, (255, 140, 60)), (0.45, (255, 45, 85)), (1.0, (175, 40, 230))]
 
 
 def finish(img, size):
     return img.resize(size, Image.LANCZOS)
 
 
-def gradient(w, h):
-    """Küçük çizilip büyütülür: degrade zaten yumuşak, büyük boyutta hızlı kalır."""
-    full = (w, h)
-    w, h = max(2, w // 8), max(2, h // 8)
-    img = Image.new("RGB", (w, h))
+def background(w, h, halo=(0.5, 0.45, 0.42)):
+    """Küçük çizilip büyütülür: her şey yumuşak, büyük boyutta da hızlı kalır."""
+    sw, sh = max(4, w // 8), max(4, h // 8)
+    img = Image.new("RGB", (sw, sh))
+    d = ImageDraw.Draw(img)
+    for y in range(sh):
+        t = y / (sh - 1)
+        d.line([(0, y), (sw, y)], fill=tuple(int(a + (b - a) * t) for a, b in zip(BG_TOP, BG_BOTTOM)))
+    hx, hy, hr = halo
+    cx, cy, rr = hx * sw, hy * sh, hr * sh
+    mask = Image.new("L", (sw, sh), 0)
+    ImageDraw.Draw(mask).ellipse([cx - rr * 1.5, cy - rr, cx + rr * 1.5, cy + rr], fill=90)
+    img.paste(Image.new("RGB", (sw, sh), HALO), (0, 0), mask.filter(ImageFilter.GaussianBlur(rr * 0.5)))
+    return img.resize((w, h), Image.BICUBIC)
+
+
+def diagonal_gradient(size, stops):
+    """Sol üstten sağ alta çok duraklı renk degradesi (küçük çizilip büyütülür)."""
+    w, h = size
+    sw, sh = max(2, w // 8), max(2, h // 8)
+    img = Image.new("RGB", (sw, sh))
     px = img.load()
-    for y in range(h):
-        for x in range(w):
-            t = min(1.0, max(0.0, (y / h) * 0.8 + (x / w) * 0.2))
-            # sol üstte hafif parlaklık
-            glow = max(0.0, 1 - math.hypot(x / w - 0.3, y / h - 0.2) / 0.9) * 0.18
-            px[x, y] = tuple(min(255, int((a + (b - a) * t) * (1 + glow))) for a, b in zip(RED_TOP, RED_BOTTOM))
-    return img.resize(full, Image.BICUBIC)
+    for y in range(sh):
+        for x in range(sw):
+            t = (x / sw * 0.6 + y / sh * 0.4)
+            for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
+                if t <= t1:
+                    k = (t - t0) / (t1 - t0)
+                    px[x, y] = tuple(int(a + (b - a) * k) for a, b in zip(c0, c1))
+                    break
+    return img.resize(size, Image.BICUBIC)
 
 
 def tv_geometry(cx, cy, height):
-    """Ekranın kutusu (yükseklik verilen birimde)."""
-    sw, sh = height * 1.5, height
+    """Gövdenin kutusu (16:10). Ayak bu kutunun altına çizilir."""
+    sw, sh = height * 1.6, height
     return (cx - sw / 2, cy - sh / 2, cx + sw / 2, cy + sh / 2)
 
 
-def draw_tv(draw, box, s):
+def rounded_mask(size, box, radius):
+    mask = Image.new("L", size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius, fill=255)
+    return mask
+
+
+def linear_alpha(size, box, top, bottom):
+    """Kutuda yukarıdan aşağı opaklık degradesi (cam parlaması için)."""
+    x0, y0, x1, y1 = (int(v) for v in box)
+    g = Image.new("L", (1, 256))
+    for i in range(256):
+        g.putpixel((0, i), int(top + (bottom - top) * i / 255))
+    g = g.resize((max(1, x1 - x0), max(1, y1 - y0)), Image.BILINEAR)
+    out = Image.new("L", size, 0)
+    out.paste(g, (x0, y0))
+    return out
+
+
+def multiply(a, b):
+    return ImageChops.multiply(a, b)
+
+
+def draw_glass_tv(img, box):
+    """Cam TV: yarı saydam gövde, içten parlayan ekran, ince parlak kenar."""
     x0, y0, x1, y1 = box
     h = y1 - y0
-    bezel = h * 0.09
-    radius = h * 0.14
-    line = max(1, int(h * 0.06))
-    # anten
-    top_mid = ((x0 + x1) / 2, y0)
-    draw.line([top_mid, (top_mid[0] - h * 0.28, y0 - h * 0.30)], fill=WHITE, width=line)
-    draw.line([top_mid, (top_mid[0] + h * 0.28, y0 - h * 0.30)], fill=WHITE, width=line)
-    # ayak
-    foot_w = h * 0.5
-    draw.rounded_rectangle([(x0 + x1) / 2 - foot_w / 2, y1 - h * 0.02, (x0 + x1) / 2 + foot_w / 2, y1 + h * 0.10],
-                           radius=h * 0.04, fill=WHITE)
-    # çerçeve + ekran
-    draw.rounded_rectangle(box, radius=radius, fill=WHITE)
-    draw.rounded_rectangle([x0 + bezel, y0 + bezel, x1 - bezel, y1 - bezel], radius=radius * 0.6, fill=SCREEN)
+    W, H = img.size
+    radius = h * 0.13
+    bezel = h * 0.05
+    white = Image.new("RGBA", (W, H), (255, 255, 255, 255))
+
+    # alttaki yumuşak gölge
+    shadow = rounded_mask((W, H), [x0 + h * 0.08, y0 + h * 0.25, x1 - h * 0.08, y1 + h * 0.22], radius)
+    shadow = shadow.point(lambda v: v * 0.55).filter(ImageFilter.GaussianBlur(h * 0.12))
+    img.paste(Image.new("RGBA", (W, H), (0, 0, 0, 255)), (0, 0), shadow)
+
+    # ayak: cam hap
+    cx = (x0 + x1) / 2
+    stand = rounded_mask((W, H), [cx - h * 0.30, y1 + h * 0.10, cx + h * 0.30, y1 + h * 0.16], h * 0.03)
+    neck = rounded_mask((W, H), [cx - h * 0.035, y1 - h * 0.02, cx + h * 0.035, y1 + h * 0.12], h * 0.02)
+    stand = ImageChops.lighter(stand, neck)
+    img.paste(white, (0, 0), stand.point(lambda v: v * 0.95))
+
+    # gövde: yarı saydam beyaz, üstte daha parlak
+    body = rounded_mask((W, H), box, radius)
+    img.paste(white, (0, 0), multiply(body, linear_alpha((W, H), box, 255, 228)))
+
+    # ekran: canlı degrade, açık bir TV gibi
+    screen_box = [x0 + bezel, y0 + bezel, x1 - bezel, y1 - bezel]
+    screen = rounded_mask((W, H), screen_box, radius * 0.6)
+    sx0, sy0, sx1, sy1 = (int(v) for v in screen_box)
+    fill = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    fill.paste(diagonal_gradient((sx1 - sx0, sy1 - sy0), SCREEN_STOPS).convert("RGBA"), (sx0, sy0))
+    img.paste(fill, (0, 0), screen)
+    # üstte hafif iç parlaklık
+    img.paste(white, (0, 0), multiply(screen, linear_alpha((W, H), [sx0, sy0, sx1, sy0 + (sy1 - sy0) * 0.5], 50, 0)))
+    return screen_box, radius
 
 
-def draw_crescent_star(img, center, unit):
-    """unit = ekranın iç yüksekliği; ay yıldız grubu bu alana ortalanır."""
-    cx_group, cy = center
-    r_out, r_in, offset = 0.30 * unit, 0.24 * unit, 0.075 * unit
-    star_r = 0.14 * unit
-    star_dx = offset + r_in + 0.05 * unit + star_r * 0.81
-    # grup yatayda ortalanır
-    left, right = -r_out, star_dx + star_r
-    cx = cx_group - (left + right) / 2
+def draw_glass_rim(img, box, radius):
+    """Ön katman: gövdenin ince parlak kenarı ve ekranda çapraz cam yansıması."""
+    x0, y0, x1, y1 = box
+    h = y1 - y0
+    W, H = img.size
+    white = Image.new("RGBA", (W, H), (255, 255, 255, 255))
+    outer = rounded_mask((W, H), box, radius)
+    t = h * 0.018
+    inner = rounded_mask((W, H), [x0 + t, y0 + t, x1 - t, y1 - t], radius - t)
+    rim = ImageChops.subtract(outer, inner)
+    img.paste(white, (0, 0), multiply(rim, linear_alpha((W, H), [x0, y0, x1, y1 + 1], 255, 90)))
 
-    mask = Image.new("L", img.size, 0)
-    md = ImageDraw.Draw(mask)
-    md.ellipse([cx - r_out, cy - r_out, cx + r_out, cy + r_out], fill=255)
-    md.ellipse([cx + offset - r_in, cy - r_in, cx + offset + r_in, cy + r_in], fill=0)
-    sx = cx + star_dx
-    points = []
-    for i in range(10):
-        r = star_r if i % 2 == 0 else star_r * 0.382
-        a = math.pi + i * math.pi / 5  # bir ucu aya bakar
-        points.append((sx + r * math.cos(a), cy + r * math.sin(a)))
-    md.polygon(points, fill=255)
-    img.paste(Image.new("RGBA", img.size, WHITE), (0, 0), mask)
+    bezel = h * 0.05
+    screen = rounded_mask((W, H), [x0 + bezel, y0 + bezel, x1 - bezel, y1 - bezel], radius * 0.6)
+    streak = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(streak).polygon([(x0 + h * 0.15, y0), (x0 + h * 0.62, y0), (x0 + h * 0.05, y1), (x0 - h * 0.42, y1)],
+                                   fill=40)
+    img.paste(white, (0, 0), multiply(streak.filter(ImageFilter.GaussianBlur(h * 0.02)), screen))
 
 
 def icon_layers(w, h):
     W, H = w * SS, h * SS
-    back = gradient(w, h)
-
-    screen_h = H * 0.50
-    box = tv_geometry(W / 2, H * 0.53, screen_h)
+    back = background(w, h)
+    tv_h = H * 0.47
+    box = tv_geometry(W / 2, H * 0.44, tv_h)
     middle = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    draw_tv(ImageDraw.Draw(middle), box, SS)
-
+    _, radius = draw_glass_tv(middle, box)
     front = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    inner_h = screen_h * (1 - 2 * 0.09)
-    draw_crescent_star(front, ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), inner_h)
+    draw_glass_rim(front, box, radius)
     return {"Back": back, "Middle": finish(middle, (w, h)), "Front": finish(front, (w, h))}
 
 
 def top_shelf(w, h):
     ss = 2  # büyük görsellerde bellek için daha düşük süper örnekleme
     W, H = w * ss, h * ss
-    img = gradient(W, H).convert("RGBA")
-    screen_h = H * 0.42
-    gap = H * 0.22
-    font = ImageFont.truetype(FONT, int(H * 0.22))
-    text = "Türkiye TV"
-    d = ImageDraw.Draw(img)
-    tw = d.textlength(text, font=font)
-    tv_w = screen_h * 1.5
-    start = (W - (tv_w + gap + tw)) / 2
-    box = tv_geometry(start + tv_w / 2, H * 0.52, screen_h)
-    draw_tv(d, box, ss)
-    inner_h = screen_h * (1 - 2 * 0.09)
-    draw_crescent_star(img, ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), inner_h)
-    d = ImageDraw.Draw(img)
-    d.text((start + tv_w + gap, H * 0.50), text, font=font, fill=WHITE, anchor="lm")
+    img = background(W, H).convert("RGBA")
+    box = tv_geometry(W / 2, H * 0.44, H * 0.46)
+    _, radius = draw_glass_tv(img, box)
+    draw_glass_rim(img, box, radius)
     return finish(img, (w, h)).convert("RGB")
 
 
