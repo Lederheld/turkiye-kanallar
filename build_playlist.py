@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import dataclasses
 import ipaddress
 import os
 import json
@@ -209,7 +210,7 @@ GEO_BLOCK_ERROR_MARKERS = ("403", "Invalid data found")
 # Gözetimsiz çalışmada: kanal sayısı öncekinin bu oranının altına düşerse gist güncellenmez
 PUBLISH_MIN_RETAINED_RATIO = 0.7
 # Süreli linkli kanallar live_resolver.py üzerinden (Mac açıkken) verilir
-RESOLVER_BASE_URL = os.environ.get("RESOLVER_BASE_URL", "").rstrip("/")   # ör. http://192.168.1.121:8765
+RESOLVER_BASE_URL = os.environ.get("RESOLVER_BASE_URL", "").rstrip("/")   # ör. http://192.168.1.50:8765
 RESOLVER_SLUG_BY_CHANNEL = {"CNN Türk": "cnnturk"}   # token IP'ye bağlı → yalnızca Türkiye'deki Mac alabilir
 STATUS_VIA_RESOLVER = "yönlendirici (Mac açıkken)"
 # Süreli ama IP'ye bağlı olmayan linkler: refresh_tokens.py (GitHub, 30 dk'da bir) gist'te günceller.
@@ -608,6 +609,31 @@ def resolve_channels(results: list[ChannelResult], candidates_by_channel: dict[s
             result.status = STATUS_NO_OFFICIAL_SOURCE
 
 
+SINGLE_VARIANT_PATTERN = re.compile(r"^(?P<base>.*/)(?P<name>[^/?]+?)_(?P<height>\d{3,4})p\.m3u8(?P<query>\?.*)?$")
+
+
+def prefer_adaptive_masters(results: list[ChannelResult]) -> None:
+    """Tek kaliteli link (ör. atv/atv_1080p.m3u8) seçildiyse yanındaki ana playlist'e (atv/atv.m3u8) geçer.
+
+    ATV'nin 1080p playlist'i isteklerin yarısında zaman aşımına uğruyor; ana playlist'te oynatıcı
+    takılan kaliteden diğerine geçebiliyor.
+    """
+    for result in results:
+        candidate = result.chosen
+        match = SINGLE_VARIANT_PATTERN.match(candidate.url) if candidate else None
+        if not match:
+            continue
+        master_url = f"{match['base']}{match['name']}.m3u8{match['query'] or ''}"
+        variant_file = f"{match['name']}_{match['height']}p.m3u8"
+        try:
+            master_text = fetch_playlist_text(master_url, candidate)
+        except Exception:
+            continue
+        if HLS_VARIANT_MARKER in master_text and variant_file in master_text:
+            log(f"{result.spec.display_name}: tek kalite yerine ana playlist → {master_url}")
+            result.chosen = dataclasses.replace(candidate, url=master_url)
+
+
 def recheck_chosen(results: list[ChannelResult]) -> None:
     chosen_results = [result for result in results if result.chosen]
     log(f"{RECHECK_DELAY_SECONDS} sn sonra seçilen {len(chosen_results)} link tekrar test ediliyor…")
@@ -697,10 +723,20 @@ def write_playlist(results: list[ChannelResult]) -> None:
     OUTPUT_PLAYLIST_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def report_host(host: str) -> str:
+    """Rapor CI'da herkese açık artifact olur: yerel ağ adresi (Mac yönlendiricisi) yazılmaz."""
+    try:
+        if ipaddress.ip_address(host).is_private:
+            return "yerel ağ"
+    except ValueError:
+        pass
+    return host
+
+
 def write_report(results: list[ChannelResult], raw_url: str | None) -> None:
     lines = [f"# Rapor ({time.strftime('%Y-%m-%d %H:%M')})", "", "| Kanal | Durum | Host | Kaynak |", "|---|---|---|---|"]
     for result in results:
-        host = result.chosen.host if result.chosen else "—"
+        host = report_host(result.chosen.host) if result.chosen else "—"
         source = result.chosen.source_label if result.chosen else "—"
         if result.chosen and result.chosen.has_stale_signature:
             source += " (sabit imza, süre denetlenmiyor)"
@@ -800,6 +836,7 @@ def main() -> int:
             if result.chosen is None and not captured.get(result.spec.display_name):
                 result.status = status_before_capture[result.spec.display_name]
 
+    prefer_adaptive_masters(results)
     if not arguments.no_recheck:
         recheck_chosen(results)
 

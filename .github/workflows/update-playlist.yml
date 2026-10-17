@@ -1,9 +1,10 @@
 # Günde iki kez: kaynakları yeniden çek, linkleri test et, ölenleri çıkar, gist'i güncelle.
 # Token yenileme YAPILMAZ; süreli linkler listeye hiç girmez.
 #
-# Gerekli repo secret'ları (public repo: loglar herkese açık, bu yüzden ikisi de secret):
+# Gerekli repo secret'ları (public repo: loglar herkese açık, bu yüzden hepsi secret):
 #   GIST_TOKEN : yalnızca "gist" yetkili GitHub token
 #   GIST_ID    : güncellenecek gist'in id'si
+#   RESOLVER_BASE_URL : (isteğe bağlı) Mac'teki live_resolver adresi, ör. http://192.168.1.50:8765
 name: Update Turkish TV playlist
 
 on:
@@ -47,7 +48,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GIST_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
-          RESOLVER_BASE_URL: ${{ vars.RESOLVER_BASE_URL }}
+          RESOLVER_BASE_URL: ${{ secrets.RESOLVER_BASE_URL }}   # yerel ağ adresi; loglarda görünmesin
         # Runner ABD'de: geo-kısıtlı (403) ya da geçici hata veren kanallar, önceki listedeki
         # link hâlâ uygunsa korunur; kanal sayısı %70'in altına düşerse gist hiç güncellenmez.
         run: python build_playlist.py --publish --gist-id "$GIST_ID" --keep-geo-blocked
