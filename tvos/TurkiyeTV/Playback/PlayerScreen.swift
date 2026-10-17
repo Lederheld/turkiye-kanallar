@@ -4,7 +4,8 @@ import SwiftUI
 /// Tam ekran oynatıcı.
 /// - Kanal değişince sol üstte birkaç saniye kanal bilgisi görünür.
 /// - Kumandada sol/sağ basılı tutunca görüntü hızlanarak sarılır (5, 10, 20, 30, 45 dk, 1 sa…).
-/// - Dokunmatik yüzeyle sarma ve alttaki zaman çubuğu tamamen AVKit'in: tek zaman çubuğu var.
+/// - Tek zaman çubuğu var, AVKit'inki. Oynarken dokunmatik yüzeyde sola/sağa kaydırınca görüntü sarılır ve
+///   o çubuktaki konum kayar (YouTube/Netflix gibi); duraklatılmışken AVKit'in kendi sarması çalışır.
 /// - Yayın akışı varsa banner, sarma göstergesi ve Zaman Tüneli program adlarını gösterir; "Baştan izle"
 ///   o an izlenen programın başına gider.
 /// - Çubuktaki "Zaman Tüneli" menüsü: program başlangıçları (akış yoksa yarım saatler); tek tıkla o ana gidilir.
@@ -364,6 +365,12 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let playback: PlaybackController
         var transportState: TransportState?
+        private var swipeRecognizer: UIPanGestureRecognizer?
+        /// Odak oynatıcının kendisinde (çubuk gizli ya da zaman çubuğunda) mı? Çubuktaki düğmelerdeyken ya da
+        /// Kanallar panelindeyken yatay kaydırma odağı gezdirir, sarmaz. AVKit bu durumu açıkça vermediği
+        /// için odaklanan görünümün sınıf adına bakılır; tanınmazsa sarma devre dışı kalır (AVKit'in davranışı).
+        private var focusIsOnPlayer = true
+        private var focusObserver: NSObjectProtocol?
         private static let arrowPressTypes: Set<Int> = [UIPress.PressType.leftArrow.rawValue,
                                                          UIPress.PressType.rightArrow.rawValue]
 
@@ -379,6 +386,36 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
                 recognizer.minimumPressDuration = 0.4
                 recognizer.delegate = self
                 view.addGestureRecognizer(recognizer)
+            }
+            let swipe = UIPanGestureRecognizer(target: self, action: #selector(swipeScrub))
+            swipe.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+            swipe.delegate = self
+            view.addGestureRecognizer(swipe)
+            swipeRecognizer = swipe
+            focusObserver = NotificationCenter.default.addObserver(
+                forName: UIFocusSystem.didUpdateNotification, object: nil, queue: .main
+            ) { [weak self] notification in
+                let context = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey] as? UIFocusUpdateContext
+                let isPlayer = context?.nextFocusedView.map { String(describing: type(of: $0)) == "_AVFocusContainerView" }
+                MainActor.assumeIsolated { self?.focusIsOnPlayer = isPlayer ?? false }
+            }
+        }
+
+        deinit {
+            if let focusObserver { NotificationCenter.default.removeObserver(focusObserver) }
+        }
+
+        @objc private func swipeScrub(_ recognizer: UIPanGestureRecognizer) {
+            guard let view = recognizer.view else { return }
+            switch recognizer.state {
+            case .began:
+                playback.beginSwipeSeek()
+            case .changed:
+                playback.updateSwipeSeek(fraction: recognizer.translation(in: view).x / max(view.bounds.width, 1))
+            case .ended, .cancelled, .failed:
+                playback.endSwipeSeek()
+            default:
+                break
             }
         }
 
@@ -406,6 +443,13 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
 
         @objc private func zapUp() { playback.zap(by: 1) }
         @objc private func zapDown() { playback.zap(by: -1) }
+
+        /// Yatay kaydırma yalnızca oynarken, odak oynatıcıdayken ve geri sarılabilen yayında sarar.
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard gestureRecognizer === swipeRecognizer, let pan = swipeRecognizer, let view = pan.view else { return true }
+            let velocity = pan.velocity(in: view)
+            return focusIsOnPlayer && playback.isPlaying && playback.canRewind && abs(velocity.x) > abs(velocity.y) * 1.5
+        }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {

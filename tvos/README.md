@@ -11,7 +11,9 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
   düğmeleri; TV kumandasındaki (CEC) kanal +/- tuşları kanal değiştirir; aşağı kaydırınca
   izlenen kanaldan başlayan **Kanallar** şeridi
 - **Geri sarma:** yayının sunucuda tuttuğu süre kadar (TRT 1'de yaklaşık 24 saat, çoğu özel kanalda
-  birkaç dakika). Dokunmatik yüzeyle sarma alttaki zaman çubuğunda (AVKit'in kendisi; tek çubuk).
+  birkaç dakika). Oynarken dokunmatik yüzeyde sola/sağa kaydırınca görüntü sarılır, alttaki
+  tek zaman çubuğu (AVKit'inki) konumu gösterir; uzun kaydırma daha uzağa gider. Duraklatılmışken
+  AVKit'in kendi sarması çalışır.
   Sol/sağ basılı tutunca görüntü hızlanarak sarılır (5, 10, 20, 30, 45 dk, 1 sa, sonra yarım saat
   yarım saat). Çubukta 10 dk geri/ileri, **Canlıya dön** ve **Zaman Tüneli** menüsü (program
   başlangıçları, akış yoksa yarım saatler). Geri kalındığında sağ üstte "Canlının … gerisinde" rozeti.

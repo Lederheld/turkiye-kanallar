@@ -38,6 +38,11 @@ final class PlaybackController: ObservableObject {
     private var unsavedWatchTime: TimeInterval = 0
     private static let watchTimeSaveInterval: TimeInterval = 30
     private var scrubTask: Task<Void, Never>?
+    /// Kaydırarak sarma: başladığı konum ve en son istenen atlama (her küçük harekette atlanmaz).
+    private var swipeStart: TimeInterval?
+    private var lastSwipeSeek: (target: TimeInterval, at: Date)?
+    private static let swipeSeekMinimumDistance: TimeInterval = 20
+    private static let swipeSeekMinimumInterval: TimeInterval = 0.2
     /// Basılı tuttukça büyüyen adımlar; listenin sonundan sonra yarım saat yarım saat artar.
     private static let scrubSteps: [TimeInterval] = [5, 10, 20, 30, 45, 60].map { $0 * 60 }
     private static let scrubStepInterval: Duration = .milliseconds(800)
@@ -138,6 +143,45 @@ final class PlaybackController: ObservableObject {
     func endScrub() {
         scrubTask?.cancel()
         scrubTask = nil
+    }
+
+    var isPlaying: Bool {
+        player.rate > 0
+    }
+
+    // MARK: - Kaydırarak sarma
+
+    func beginSwipeSeek() {
+        guard canRewind else { return }
+        swipeStart = player.currentTime().seconds
+        lastSwipeSeek = nil
+    }
+
+    /// `fraction`: yüzey genişliğine göre kaydırma (sola negatif). Doğrusal değil: kısa kaydırma birkaç
+    /// dakika (0,1 → ~5 dk), yarım kaydırma ~50 dk, tam kaydırma ~2,5 saat. Parmak hareket ettikçe
+    /// görüntü atlar; çok sık atlamamak için en az 20 sn fark ve 0,2 sn ara beklenir.
+    func updateSwipeSeek(fraction: Double) {
+        guard let swipeStart else { return }
+        let target = swipeStart + Self.swipeDistance(fraction)
+        if let last = lastSwipeSeek,
+           abs(last.target - target) < Self.swipeSeekMinimumDistance
+            || Date().timeIntervalSince(last.at) < Self.swipeSeekMinimumInterval { return }
+        lastSwipeSeek = (target, Date())
+        seek { _, _ in target }
+    }
+
+    func endSwipeSeek() {
+        if let lastSwipeSeek {
+            seek { _, _ in lastSwipeSeek.target }
+        }
+        swipeStart = nil
+        lastSwipeSeek = nil
+    }
+
+    private static func swipeDistance(_ fraction: Double) -> TimeInterval {
+        let magnitude = min(abs(fraction), 1)
+        let minutes = 40 * magnitude * (1 + 3 * magnitude)
+        return (fraction < 0 ? -minutes : minutes) * 60
     }
 
     /// Hedef, oynatma konumu ve canlı uçtan hesaplanır; sunucunun tuttuğu pencereye sıkıştırılır.
