@@ -2,6 +2,8 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var store: PlaylistStore
+    @EnvironmentObject private var guide: ProgramGuide
+    @EnvironmentObject private var reminders: ReminderStore
 
     /// Öne çıkan: son izlenen, yoksa ilk favori, yoksa listenin ilk kanalı.
     private var featured: Channel? {
@@ -14,6 +16,14 @@ struct HomeView: View {
                 if let featured {
                     HeroView(channel: featured, isResume: store.lastChannel != nil)
                         .focusSection()
+                    let tonight = Tonight.programs(store: store, guide: guide)
+                    if !tonight.isEmpty {
+                        ProgramShelf(title: "Bu Akşam", symbol: "sparkles.tv", items: tonight)
+                    }
+                    let upcoming = remindedPrograms(excluding: Set(tonight.map(\.id)))
+                    if !upcoming.isEmpty {
+                        ProgramShelf(title: "Hatırlatmalar", symbol: "bell.fill", items: upcoming)
+                    }
                     if store.sortsByWatchTime && !store.frequentChannels.isEmpty {
                         ChannelShelf(title: "En Çok İzlediklerin", symbol: "chart.bar.fill",
                                      channels: store.frequentChannels)
@@ -34,6 +44,16 @@ struct HomeView: View {
                 }
             }
             .padding(.bottom, 80)
+        }
+    }
+
+    /// "Bu Akşam"da görünmeyen hatırlatmalar (ör. yarınki maç).
+    private func remindedPrograms(excluding shown: Set<String>) -> [ScheduledProgram] {
+        reminders.reminders.compactMap { reminder in
+            guard let channel = store.channel(named: reminder.channelName) else { return nil }
+            let item = ScheduledProgram(channel: channel,
+                                        program: TVProgram(title: reminder.title, start: reminder.start, end: reminder.end))
+            return shown.contains(item.id) ? nil : item
         }
     }
 }

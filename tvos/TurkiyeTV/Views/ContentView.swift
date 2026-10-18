@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var store: PlaylistStore
     @EnvironmentObject private var guide: ProgramGuide
+    @EnvironmentObject private var reminders: ReminderStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var playingChannel: Channel?
     @State private var didResume = false
@@ -21,7 +22,20 @@ struct ContentView: View {
         .background(AppBackground())
         .environment(\.playChannel, PlayChannelAction { playingChannel = $0 })
         .fullScreenCover(item: $playingChannel) { channel in
-            PlayerScreen(channel: channel, store: store, guide: guide)
+            PlayerScreen(channel: channel, store: store, guide: guide, reminders: reminders)
+        }
+        // Oynatıcı kapalıyken (ana ekranda) hatırlatma: oynatıcıdaysa orada kart olarak çıkar
+        .alert(dueReminder.map { "\($0.channelName) · \(ProgramText.clock($0.start))" } ?? "",
+               isPresented: Binding(get: { playingChannel == nil && dueReminder != nil },
+                                    set: { if !$0 { reminders.dismissDue() } }),
+               presenting: dueReminder) { reminder in
+            Button("İzle") {
+                playingChannel = store.channel(named: reminder.channelName)
+                reminders.dismissDue()
+            }
+            Button("Kapat", role: .cancel) { reminders.dismissDue() }
+        } message: { reminder in
+            Text(reminder.start > Date() ? "\(reminder.title) birazdan başlıyor" : "\(reminder.title) başladı")
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -35,10 +49,18 @@ struct ContentView: View {
         .onChange(of: store.channels.isEmpty, initial: true) { _, isEmpty in
             guard !isEmpty, !didResume else { return }
             didResume = true
-            if let channel = store.startupChannel {
+            // Hatırlatılan program şu an yayındaysa açılışta o kanal gelir
+            if let live = reminders.live, let channel = store.channel(named: live.channelName) {
+                playingChannel = channel
+                reminders.dismissDue()
+            } else if let channel = store.startupChannel {
                 playingChannel = channel
             }
         }
+    }
+
+    private var dueReminder: Reminder? {
+        reminders.due.flatMap { store.channel(named: $0.channelName) == nil ? nil : $0 }
     }
 }
 

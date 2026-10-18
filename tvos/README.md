@@ -26,6 +26,11 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
   0,3-0,8 sn). Odak başka kanala geçince ya da şerit kapanınca durdurulur
 - **Uyku zamanlayıcısı:** Kanal menüsünde 30/60/90 dk ya da program bitince; bitmeden 1 dk önce
   ekranda "30 dk daha" düğmesi, süre dolunca yayın durur ve ana ekrana dönülür
+- **Hatırlatıcı:** Kanal menüsündeki "Hatırlat" listesinden ya da ana sayfadaki program kartlarından kurulur.
+  Program başlamadan 1 dk önce oynatıcıda kart ve "Geç" düğmesi çıkar (kanal arkada hazırlanır, anında açılır);
+  ana ekrandaysan uyarı penceresi. Uygulama kapalıyken açılırsa yayındaki hatırlatılan kanal açılır
+- **Bu Akşam rafı:** ana sayfada 19:45–21:00 arası başlayan uzun yapımlar (dizi, film, maç); yayındaysa
+  tıklayınca açılır, değilse hatırlatıcı kurar. Kurulu hatırlatmalar ayrıca "Hatırlatmalar" rafında
 - **Hız:** kanal, liste tazelenmesini beklemeden eldeki linkle açılır (liste arka planda yenilenir);
   logolar ve ATV'nin imzalı linki açılışta önceden alınır, logolar bellekte tutulur
 - **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →

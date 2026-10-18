@@ -17,26 +17,31 @@ import SwiftUI
 struct PlayerScreen: View {
     @ObservedObject var store: PlaylistStore
     @ObservedObject var guide: ProgramGuide
+    @ObservedObject var reminders: ReminderStore
     @StateObject private var playback: PlaybackController
     @Environment(\.dismiss) private var dismiss
     @State private var showsBanner = false
     @State private var bannerTask: Task<Void, Never>?
 
-    init(channel: Channel, store: PlaylistStore, guide: ProgramGuide) {
+    init(channel: Channel, store: PlaylistStore, guide: ProgramGuide, reminders: ReminderStore) {
         self.store = store
         self.guide = guide
+        self.reminders = reminders
         _playback = StateObject(wrappedValue: PlaybackController(channel: channel, store: store, guide: guide))
     }
 
     var body: some View {
-        PlayerViewControllerRepresentable(playback: playback, store: store, guide: guide,
+        PlayerViewControllerRepresentable(playback: playback, store: store, guide: guide, reminders: reminders,
                                           state: TransportState(isFavorite: store.isFavorite(playback.channel),
                                                                 canRecall: playback.previousChannel != nil,
                                                                 canRewind: playback.canRewind,
                                                                 hasGuide: !guide.programs(for: playback.channel).isEmpty,
                                                                 sleepEndsAt: playback.sleepEndsAt,
                                                                 isSleepWarningShown: playback.isSleepWarningShown,
-                                                                timeline: timelineStops))
+                                                                timeline: timelineStops,
+                                                                upcoming: upcomingPrograms,
+                                                                remindedIDs: Set(reminders.reminders.map(\.id)),
+                                                                dueChannel: dueChannel?.name))
             .ignoresSafeArea()
             .overlay(alignment: .topLeading) {
                 if showsBanner && playback.errorMessage == nil {
@@ -78,6 +83,16 @@ struct PlayerScreen: View {
                         .allowsHitTesting(false)
                 }
             }
+            .overlay(alignment: .bottomTrailing) {
+                if let due = reminders.due, let channel = dueChannel {
+                    ReminderPrompt(reminder: due, channel: channel)
+                        .padding(.trailing, 80)
+                        .padding(.bottom, 260)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(.smooth, value: reminders.due)
             .overlay {
                 if let message = playback.errorMessage {
                     errorOverlay(message)
@@ -91,7 +106,14 @@ struct PlayerScreen: View {
                 bannerTask?.cancel()
                 playback.stop()
             }
-            .onChange(of: playback.channel.name) { _, _ in showBanner() }
+            .onChange(of: playback.channel.name) { _, name in
+                showBanner()
+                if reminders.due?.channelName == name { reminders.dismissDue() }
+            }
+            // Hatırlatılan program başlamak üzere: kanalı gizli oynatıcıda hazırla, "Geç" anında açılsın
+            .onChange(of: dueChannel?.name, initial: true) { _, _ in
+                if let dueChannel { playback.prepareStandby(dueChannel) }
+            }
             .onChange(of: playback.sleepTimerFired) { _, fired in
                 if fired { dismiss() }
             }
@@ -115,6 +137,18 @@ struct PlayerScreen: View {
             date -= step
         }
         return stops
+    }
+
+    /// Bu kanalda sıradaki programlar (Kanal menüsünden hatırlatıcı kurmak için).
+    private var upcomingPrograms: [TVProgram] {
+        let now = Date()
+        return Array(guide.programs(for: playback.channel).filter { $0.start > now }.prefix(8))
+    }
+
+    /// Başlamak üzere olan hatırlatılmış programın kanalı (izlenen kanal değilse).
+    private var dueChannel: Channel? {
+        guard let due = reminders.due, due.channelName != playback.channel.name else { return nil }
+        return store.channel(named: due.channelName)
     }
 
     /// Ekrandaki görüntünün yayınlandığı an (geri sarıldıysa geçmişte).
@@ -395,6 +429,10 @@ struct TransportState: Equatable {
     var sleepEndsAt: Date?
     var isSleepWarningShown: Bool
     var timeline: [TimelineStop]
+    var upcoming: [TVProgram]
+    var remindedIDs: Set<String>
+    /// Hatırlatılan programın başladığı kanal: ekranda "Geç" düğmesi çıkar.
+    var dueChannel: String?
 }
 
 struct TimelineStop: Equatable {
@@ -406,6 +444,7 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
     let playback: PlaybackController
     let store: PlaylistStore
     let guide: ProgramGuide
+    let reminders: ReminderStore
     let state: TransportState
 
     private static let channelPanelHeight: CGFloat = 430
@@ -452,13 +491,32 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         }
         items.append(channelMenu(state))
         controller.transportBarCustomMenuItems = items
-        // Uyku zamanlayıcısı bitmek üzereyken ekranda tek düğme: uzat
+        // Ekrandaki düğmeler: hatırlatılan program başlıyorsa o kanala geç; uyku zamanlayıcısı bitmek üzereyse uzat
         let playback = playback
-        controller.contextualActions = state.isSleepWarningShown ? [
-            UIAction(title: "30 dk daha", image: UIImage(systemName: "moon.zzz")) { _ in
+        let store = store
+        let reminders = reminders
+        var actions: [UIAction] = []
+        if let dueChannel = state.dueChannel {
+            // AVKit odağı sondaki düğmeye veriyor: "Geç" sonda dursun, tek tıkla geçilsin
+            actions.append(UIAction(title: "Kalsın", image: UIImage(systemName: "xmark")) { _ in
+                Task { @MainActor in
+                    reminders.dismissDue()
+                    playback.discardStandby()
+                }
+            })
+            actions.append(UIAction(title: "Geç: \(dueChannel)", image: UIImage(systemName: "bell.fill")) { _ in
+                Task { @MainActor in
+                    if let channel = store.channel(named: dueChannel) { playback.play(channel) }
+                    reminders.dismissDue()
+                }
+            })
+        }
+        if state.isSleepWarningShown {
+            actions.append(UIAction(title: "30 dk daha", image: UIImage(systemName: "moon.zzz")) { _ in
                 Task { @MainActor in playback.extendSleepTimer() }
-            },
-        ] : []
+            })
+        }
+        controller.contextualActions = actions
     }
 
     /// Zaman Tüneli: canlıya dön, programın başı, 10 dk geri/ileri; altında program başlangıçları
@@ -527,11 +585,35 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
                                 image: UIImage(systemName: state.isFavorite ? "star.fill" : "star")) { _ in
             Task { @MainActor in store.toggleFavorite(playback.channel) }
         }
-        return UIMenu(title: "Kanal", image: UIImage(systemName: "tv"), children: [
+        var children: [UIMenuElement] = [
             UIMenu(options: .displayInline, children: actions),
             UIMenu(options: .displayInline, children: [favorite]),
-            sleepMenu(state),
-        ])
+        ]
+        if !state.upcoming.isEmpty {
+            children.append(reminderMenu(state))
+        }
+        children.append(sleepMenu(state))
+        return UIMenu(title: "Kanal", image: UIImage(systemName: "tv"), children: children)
+    }
+
+    /// Sıradaki programlar; seçilen program başlamadan hatırlatılır (işaretliler kurulu).
+    private func reminderMenu(_ state: TransportState) -> UIMenu {
+        let playback = playback
+        let reminders = reminders
+        let calendar = Calendar.current
+        let items: [UIMenuElement] = state.upcoming.map { program in
+            let action = UIAction(title: "\(ProgramText.clock(program.start))  \(program.title)") { _ in
+                Task { @MainActor in reminders.toggle(playback.channel, program) }
+            }
+            let id = Reminder(channel: playback.channel, program: program).id
+            action.state = state.remindedIDs.contains(id) ? .on : .off
+            if !calendar.isDateInToday(program.start) {
+                action.subtitle = "Yarın"
+            }
+            return action
+        }
+        let isAnySet = state.upcoming.contains { state.remindedIDs.contains(Reminder(channel: playback.channel, program: $0).id) }
+        return UIMenu(title: "Hatırlat", image: UIImage(systemName: isAnySet ? "bell.fill" : "bell"), children: items)
     }
 
     /// Uyku zamanlayıcısı: süre dolunca yayın durur, ana ekrana dönülür, Apple TV kendi uykusuna geçer.

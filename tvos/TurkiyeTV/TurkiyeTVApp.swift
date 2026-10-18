@@ -5,6 +5,7 @@ import SwiftUI
 struct TurkiyeTVApp: App {
     @StateObject private var store = PlaylistStore()
     @StateObject private var guide = ProgramGuide()
+    @StateObject private var reminders = ReminderStore()
 
     init() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
@@ -17,6 +18,7 @@ struct TurkiyeTVApp: App {
             ContentView()
                 .environmentObject(store)
                 .environmentObject(guide)
+                .environmentObject(reminders)
                 .preferredColorScheme(.dark)
                 .task {
                     // İmzalı linkler (ATV) hemen: kanal açılırken token beklenmesin
