@@ -1,0 +1,121 @@
+# Türkiye TV — Apple TV uygulaması
+
+Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uygulaması (SwiftUI + AVPlayer).
+
+- **Ana Sayfa:** son izlenen kanalla büyük kart, Favoriler, Son İzlenenler ve kategori rafları
+  (Ulusal, Haber, Ekonomi, Spor, Çocuk, Belgesel ve Yaşam, Müzik). Kategori kanal adından çıkarılır
+- **Kanallar:** tüm kanallar numaralı ızgarada. **Ara:** ada ya da kanal numarasına göre arama
+- Uzun basışla favorilere ekleme
+- Bir TV gibi açılışta en çok izlenen kanal başlar (Ayarlar'dan son kanal ya da ana sayfa seçilebilir)
+- Oynatırken: kanal değişince kanal bilgisi görünür; çubukta önceki/sonraki/son kanal ve favori
+  düğmeleri; TV kumandasındaki (CEC) kanal +/- tuşları kanal değiştirir; aşağı kaydırınca
+  izlenen kanaldan başlayan **Kanallar** şeridi
+- **Geri sarma:** yayının sunucuda tuttuğu süre kadar (TRT 1'de yaklaşık 24 saat, çoğu özel kanalda
+  birkaç dakika). Oynarken dokunmatik yüzeyde sola/sağa kaydırınca hedef, AVKit'in tek zaman çubuğunun
+  üstünde saat ve programla gösterilir; bırakınca oraya atlanır, art arda kaydırmalar toplanır (hızı
+  Ayarlar'dan). Çubuk program sınırlarında bölümlere ayrılır. Sol/sağ basılı tutunca görüntü hızlanarak
+  sarılır (5, 10, 20, 30, 45 dk, 1 sa…). Çubukta yalnızca iki menü: **Zaman Tüneli** (Canlıya dön,
+  Programın başına, 10 dk geri/ileri, program başlangıçları) ve **Kanal** (önceki/sonraki/son kanal,
+  favori). Geri kalındığında sağ üstte "Canlının … gerisinde" rozeti. Uygulama kendisi kayıt yapmaz
+- **Yayın akışı:** epgshare01 ve open-epg'den (XMLTV) 6 saatte bir indirilir, dün önbellekte tutulur.
+  Kartlarda ve kanal bilgisinde o an yayındaki program; sararken hedefteki program; Zaman Tüneli menüsünde
+  programların başlangıçları; oynatma çubuğunda **Baştan izle**. Canlının gerisindeyken sağ üstteki
+  rozet birkaç saniye sonra küçük bir baloncuğa dönüşür
+- **Anında kanal geçişi:** Kanallar şeridinde bir kanalın üzerinde 0,6 sn durunca o kanal gizli ikinci
+  bir oynatıcıda sessizce açılır; seçilince bu oynatıcı ekrana alınır (simülatörde 0,1 sn; normalde
+  0,3-0,8 sn). Odak başka kanala geçince ya da şerit kapanınca durdurulur
+- **Uyku zamanlayıcısı:** Kanal menüsünde 30/60/90 dk ya da program bitince; bitmeden 1 dk önce
+  ekranda "30 dk daha" düğmesi, süre dolunca yayın durur ve ana ekrana dönülür
+- **Hatırlatıcı:** Kanal menüsündeki "Hatırlat" listesinden ya da ana sayfadaki program kartlarından kurulur.
+  Program başlamadan 1 dk önce oynatıcıda kart ve "Geç" düğmesi çıkar (kanal arkada hazırlanır, anında açılır);
+  ana ekrandaysan uyarı penceresi. Uygulama kapalıyken açılırsa yayındaki hatırlatılan kanal açılır
+- **Bu Akşam rafı:** ana sayfada 19:45–21:00 arası başlayan uzun yapımlar (dizi, film, maç); yayındaysa
+  tıklayınca açılır, değilse hatırlatıcı kurar. Kurulu hatırlatmalar ayrıca "Hatırlatmalar" rafında
+- **Rehber:** solda kanallar, sağda yarım saat öncesinden 12 saat sonrasına program ızgarası; satırlar birlikte
+  kayar, şimdiki an kırmızı çizgi. Yayındaki programa basınca kanal açılır, ilerideki programa basınca hatırlatıcı
+- **Akıllı hata ekranı:** kanal açılmazsa nedeni söylenir (internet yok / erişim reddedildi / adres değişmiş /
+  yanıt yok), 15-30-60 sn arayla kendiliğinden tekrar denenir, internet gidince bağlantı gelir gelmez açılır;
+  altında aynı kategoriden en çok izlenen 4 kanal tek tıkla
+- **Köşede izleme ve ikili ekran:** çubuğun en sağındaki düğmeyle kanal köşeye alınır, ana sayfaya dönülür;
+  başka kanal açılınca o tam ekranda, köşedeki oynamaya devam eder (ör. maç köşede, dizi tam ekranda).
+  TV tuşu köşe seçeneklerini açar: Tam Ekran / Kapat / Taşı
+- **Siri:** uygulamanın adı "Canlı TV"; "Canlı TV'de ATV'yi aç", "Canlı TV'de Show TV aç", "Canlı TV'de TRT 1
+  kanalını aç" gibi. Apple kısayol cümlesinde uygulama adını şart koşuyor; kanal adları listeden otomatik gelir
+- **Profiller:** Apple TV'deki her kullanıcının favorileri, geçmişi, ayarları ve hatırlatıcıları ayrı
+- **iCloud eşitleme:** favoriler, son izlenenler, izleme süreleri, ayarlar ve hatırlatıcılar aynı Apple
+  hesabındaki cihazlar arasında eşitlenir
+- **Hız:** kanal, liste tazelenmesini beklemeden eldeki linkle açılır (liste arka planda yenilenir);
+  logolar ve ATV'nin imzalı linki açılışta önceden alınır, logolar bellekte tutulur
+- **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →
+  listedeki link → tek kaliteli linkin ana playlist'i). Yayın açılışta 6 sn içinde başlamazsa ya da sonradan 10 sn donarsa sıradakine
+  geçilir; hepsi biterse liste yenilenip bir tur daha denenir. ATV, listedeki sorunlu CDN yerine
+  atv.com.tr'nin token servisinden Apple TV'nin kendisi için alınan linkle oynar
+- **Kişiselleştirme:** izleme süresi kanal başına tutulur (iki haftada yarıya iner); en çok izlenen
+  kategoriler ve kanallar öne gelir; ana sayfanın ilk satırı tüm kanallar bu sırayla, ardından Bu Akşam ve kategoriler. Ayarlar'dan kapatılabilir
+- Playlist'teki `#EXTVLCOPT` User-Agent / Referer header'larını yayına ekler
+- Liste 10 dakikadan eskiyse oynatmadan önce tazelenir. Yayın hata verirse liste yenilenip
+  bir kez daha denenir (DMAX/TLC/Beyaz TV'nin süreli linkleri için)
+- Son indirilen liste önbellekte tutulur, uygulama açılır açılmaz görünür
+
+## Gerekenler
+- Xcode 16 veya üstü yüklü bir Mac, tvOS 17+ Apple TV
+- Apple hesabı: ücretsiz hesapla kurulan uygulama 7 günde bir yeniden yüklenmeli.
+  Ücretli Developer hesabıyla (yıllık 99 $) bu süre 1 yıl olur, TestFlight da kullanılabilir.
+
+## Kurulum
+1. Ayar dosyasını oluşturun (git'e girmez):
+   ```sh
+   cd tvos/Config
+   cp Secrets.example.xcconfig Secrets.xcconfig
+   ```
+   İçine gist'in raw adresini (`build_playlist.py --publish` çıktısındaki adres; `https:/$()/` yazımına dikkat),
+   ekip kimliğinizi ve size özgü bir bundle id yazın.
+2. `tvos/TurkiyeTV.xcodeproj`'u Xcode'da açın.
+3. Apple TV'yi eşleyin: Apple TV'de *Ayarlar > Uzaktan Uygulamalar ve Aygıtlar*,
+   Xcode'da *Window > Devices and Simulators*. Mac ile Apple TV aynı ağda olmalı.
+4. Üstte hedef olarak Apple TV'yi seçip ▶︎ (Cmd+R).
+
+Adres derlemeye girmediyse uygulamadaki **Ayarlar** ekranından da girilebilir
+(iPhone'a gelen klavye bildirimiyle yazmak daha kolay).
+
+## Notlar
+- **CNN Türk:** Listede `live_resolver.py`'nin yerel ağ adresiyle gelir. Yalnızca o Mac açıkken
+  ve Apple TV aynı ağdayken açılır.
+- **Simülatör:** Xcode'daki Apple TV simülatörüyle de denenebilir. Mac yurt dışındaysa coğrafi
+  kısıtlı kanallar açılmaz.
+- **İkon:** 3 katmanlı paralaks ikon ve Top Shelf görselleri `tools/make_icons.py` ile üretilir.
+  Tasarımı değiştirmek için script'i düzenleyip
+  `python3 tvos/tools/make_icons.py tvos/TurkiyeTV/Assets.xcassets` çalıştırın.
+- Uygulama yalnızca kişisel kullanım içindir. Yayın hakları bize ait olmadığından App Store'a gönderilmez.
+
+## iPhone: Canlı TV kumandası
+
+`CanliTVRemote` hedefi; ortak model kodu (`Shared/`: liste, yayın akışı, hatırlatıcılar, iCloud, Siri) iki
+uygulamada da derlenir.
+
+- **Kanallar:** şu an yayındaki programlar ve ilerlemesi; kanala dokununca Apple TV'de açılır. Üstteki kartta
+  Apple TV'de oynayan kanal ve önceki/sonraki düğmeleri
+- **Bu Akşam / kanal akışı / Hatırlatmalar:** zile dokununca hatırlatıcı kurulur; Apple TV'dekilerle iCloud
+  üzerinden ortak. Program başlamadan 1 dk önce iPhone'da bildirim; dokununca kanal Apple TV'de açılır
+- **Siri (iPhone'da):** "Canlı TV'de ATV'yi aç" kanalı Apple TV'de açar
+- **Bağlantı:** ev ağında Bonjour (`_canlitv._tcp`), satır başına JSON. İstekler Apple TV'nin ürettiği ve yalnızca
+  iCloud anahtar-değer deposuyla paylaşılan anahtarla HMAC-SHA256 imzalı, 2 dk'dan eski istek reddedilir:
+  aynı ağdaki başka biri kanal değiştiremez. Apple TV'de Canlı TV açık olmalı (arka plandayken sistem
+  dinleyiciyi askıya alır)
+- Kurulum: `xcodebuild -scheme CanliTVRemote -destination 'id=<iPhone UDID>' -allowProvisioningUpdates`;
+  `Secrets.xcconfig`'teki `APP_BUNDLE_ID` iki uygulamada ortak (iPhone'un kimliği sonuna `.remote` alır)
+
+## TLS denetimi
+
+Ekim 2026'da listedeki 43 kanalın master → varyant → segment zincirindeki 35 sunucu `nscurl --ats-diagnostics`
+ile denendi: hepsi ATS'nin varsayılan şartlarını (TLS 1.2+, ileri gizlilik, SHA-256 sertifika) karşılıyor
+(mncdn kök adreste bağlantıyı kesiyor ama TLS 1.3 ve geçerli sertifika). Bu yüzden Info.plist'teki genel
+`NSAllowsArbitraryLoadsForMedia` muafiyeti kaldırıldı; yalnızca yerel ağ (`NSAllowsLocalNetworking`, CNN Türk
+yönlendiricisi) düz http kalır. Yeni bir kaynak http ya da eski TLS kullanırsa o kanal hata ekranına düşer.
+
+## Testler
+
+- Uygulama: `xcodebuild test -project TurkiyeTV.xcodeproj -scheme TurkiyeTV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'`
+  (M3U ayrıştırma, ad eşleme, hata sınıflandırma, iCloud birleştirme, Siri ad eşleme, kumanda imzası, süre metinleri)
+- Pipeline: `python -m unittest discover -s tests` (kökte); GitHub'da her push'ta "Testler" iş akışı çalışır
+

@@ -8,4 +8,8 @@ turkiye-kanallar.m3u
 launchd-yedek.plist
 .token_gist_id
 resolver.log
+tvos/Config/Secrets.xcconfig
+xcuserdata/
+DerivedData/
+*.xcuserstate
 epg.json

@@ -1,0 +1,5 @@
+// iPhone kumandası (CanliTVRemote): Apple TV uygulamasının ayarları + kendi kimliği
+#include "Config.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_ID).remote
+CODE_SIGN_ENTITLEMENTS = CanliTVRemote/CanliTVRemote.entitlements

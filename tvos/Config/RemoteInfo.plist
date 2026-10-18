@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PlaylistURL</key>
+	<string>$(PLAYLIST_URL)</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Evdeki Apple TV'de Canlı TV'yi bulup kanal değiştirmek için.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_canlitv._tcp</string>
+	</array>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Türkiye TV</string>
+		</dict>
+	</array>
+</dict>
+</plist>

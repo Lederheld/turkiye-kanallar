@@ -13,3 +13,6 @@ Gerekli secret'lar: `GIST_TOKEN` (yalnızca gist yetkili token), `GIST_ID`.
   GitHub'ın kendi zamanlayıcısı güvenilir tetiklemediği için cron-job.org 30 dk'da bir
   `workflow_dispatch` çağırır (yalnızca bu repoda Actions: Read and write yetkili fine-grained token).
 - CNN Türk: token IP'ye bağlı; `live_resolver.py` Türkiye'deki bir Mac'te çalışırken açılır.
+
+## Apple TV uygulaması
+`tvos/` klasöründe listeyi oynatan SwiftUI uygulaması var; kurulum için `tvos/README.md`.

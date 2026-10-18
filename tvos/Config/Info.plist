@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PlaylistURL</key>
+	<string>$(PLAYLIST_URL)</string>
+	<!-- Köşede izleme (Resim içinde Resim) uygulamadan çıkınca da sürsün -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<!-- Siri eski adı da tanısın -->
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Türkiye TV</string>
+		</dict>
+	</array>
+	<!-- Tüm yayın sunucuları ATS'nin varsayılan şartlarını (TLS 1.2+, ileri gizlilik, SHA-256 sertifika)
+	     karşılıyor (tvos/README.md, "TLS denetimi"); tek istisna yerel ağdaki live_resolver (CNN Türk, düz http) -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>CNN Türk yayını yerel ağdaki Mac'ten alınır; iPhone'daki Canlı TV kumanda olarak bağlanır.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_canlitv._tcp</string>
+	</array>
+</dict>
+</plist>
