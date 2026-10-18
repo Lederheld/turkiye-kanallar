@@ -24,6 +24,8 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
 - **Anında kanal geçişi:** Kanallar şeridinde bir kanalın üzerinde 0,6 sn durunca o kanal gizli ikinci
   bir oynatıcıda sessizce açılır; seçilince bu oynatıcı ekrana alınır (simülatörde 0,1 sn; normalde
   0,3-0,8 sn). Odak başka kanala geçince ya da şerit kapanınca durdurulur
+- **Uyku zamanlayıcısı:** Kanal menüsünde 30/60/90 dk ya da program bitince; bitmeden 1 dk önce
+  ekranda "30 dk daha" düğmesi, süre dolunca yayın durur ve ana ekrana dönülür
 - **Hız:** kanal, liste tazelenmesini beklemeden eldeki linkle açılır (liste arka planda yenilenir);
   logolar ve ATV'nin imzalı linki açılışta önceden alınır, logolar bellekte tutulur
 - **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →

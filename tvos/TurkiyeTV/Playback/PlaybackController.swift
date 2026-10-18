@@ -6,6 +6,12 @@ import AVFoundation
 final class PlaybackController: ObservableObject {
     @Published private(set) var channel: Channel
     @Published private(set) var errorMessage: String?
+    /// Uyku zamanlayıcısının biteceği an; kapalıyken nil.
+    @Published private(set) var sleepEndsAt: Date?
+    /// Bitmeden bir dakika önce true: ekranda "Devam et" düğmesi çıkar.
+    @Published private(set) var isSleepWarningShown = false
+    /// Süre dolunca true: oynatıcı kapanır, Apple TV kendi uykusuna geçer.
+    @Published private(set) var sleepTimerFired = false
     /// Bir önceki izlenen kanal ("son kanal" tuşu için).
     @Published private(set) var previousChannel: Channel?
     /// Yayının sunucuda tuttuğu geri sarılabilir süre (dakikaya yuvarlanır). TRT'de saatler, çoğu kanalda birkaç dakika.
@@ -286,7 +292,53 @@ final class PlaybackController: ObservableObject {
     }
 
     /// Saniyede bir: izleme süresini sayar, geri sarma durumunu günceller.
+    // MARK: - Uyku zamanlayıcısı
+
+    enum SleepOption {
+        case minutes(Int)
+        case endOfProgram
+    }
+
+    private static let sleepWarningLead: TimeInterval = 60
+
+    func setSleepTimer(_ option: SleepOption) {
+        switch option {
+        case .minutes(let minutes):
+            sleepEndsAt = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        case .endOfProgram:
+            let watched = Date().addingTimeInterval(-behindLive)
+            // canlının gerisindeysek program da o kadar geç biter
+            sleepEndsAt = guide.program(for: channel, at: watched).map { $0.end.addingTimeInterval(behindLive) }
+                ?? Date().addingTimeInterval(60 * 60)
+        }
+        isSleepWarningShown = false
+    }
+
+    func extendSleepTimer(minutes: Int = 30) {
+        sleepEndsAt = (sleepEndsAt ?? Date()).addingTimeInterval(TimeInterval(minutes * 60))
+        isSleepWarningShown = false
+    }
+
+    func cancelSleepTimer() {
+        sleepEndsAt = nil
+        isSleepWarningShown = false
+    }
+
+    private func checkSleepTimer() {
+        guard let sleepEndsAt else { return }
+        let remaining = sleepEndsAt.timeIntervalSinceNow
+        if remaining <= 0 {
+            self.sleepEndsAt = nil
+            isSleepWarningShown = false
+            player.pause()
+            sleepTimerFired = true
+        } else if remaining <= Self.sleepWarningLead, !isSleepWarningShown {
+            isSleepWarningShown = true
+        }
+    }
+
     private func tick() {
+        checkSleepTimer()
         updateNowPlayingIfNeeded()
         if player.rate > 0, player.currentItem?.status == .readyToPlay {
             unsavedWatchTime += 1

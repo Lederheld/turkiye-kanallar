@@ -34,6 +34,8 @@ struct PlayerScreen: View {
                                                                 canRecall: playback.previousChannel != nil,
                                                                 canRewind: playback.canRewind,
                                                                 hasGuide: !guide.programs(for: playback.channel).isEmpty,
+                                                                sleepEndsAt: playback.sleepEndsAt,
+                                                                isSleepWarningShown: playback.isSleepWarningShown,
                                                                 timeline: timelineStops))
             .ignoresSafeArea()
             .overlay(alignment: .topLeading) {
@@ -90,6 +92,9 @@ struct PlayerScreen: View {
                 playback.stop()
             }
             .onChange(of: playback.channel.name) { _, _ in showBanner() }
+            .onChange(of: playback.sleepTimerFired) { _, fired in
+                if fired { dismiss() }
+            }
     }
 
     /// Zaman Tüneli durakları, yeniden eskiye: penceredeki program başlangıçları; akış yoksa yarım saatler.
@@ -387,6 +392,8 @@ struct TransportState: Equatable {
     var canRecall: Bool
     var canRewind: Bool
     var hasGuide: Bool
+    var sleepEndsAt: Date?
+    var isSleepWarningShown: Bool
     var timeline: [TimelineStop]
 }
 
@@ -445,6 +452,13 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         }
         items.append(channelMenu(state))
         controller.transportBarCustomMenuItems = items
+        // Uyku zamanlayıcısı bitmek üzereyken ekranda tek düğme: uzat
+        let playback = playback
+        controller.contextualActions = state.isSleepWarningShown ? [
+            UIAction(title: "30 dk daha", image: UIImage(systemName: "moon.zzz")) { _ in
+                Task { @MainActor in playback.extendSleepTimer() }
+            },
+        ] : []
     }
 
     /// Zaman Tüneli: canlıya dön, programın başı, 10 dk geri/ileri; altında program başlangıçları
@@ -516,7 +530,31 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         return UIMenu(title: "Kanal", image: UIImage(systemName: "tv"), children: [
             UIMenu(options: .displayInline, children: actions),
             UIMenu(options: .displayInline, children: [favorite]),
+            sleepMenu(state),
         ])
+    }
+
+    /// Uyku zamanlayıcısı: süre dolunca yayın durur, ana ekrana dönülür, Apple TV kendi uykusuna geçer.
+    private func sleepMenu(_ state: TransportState) -> UIMenu {
+        let playback = playback
+        var options: [UIMenuElement] = [30, 60, 90].map { minutes in
+            UIAction(title: "\(minutes) dakika") { _ in
+                Task { @MainActor in playback.setSleepTimer(.minutes(minutes)) }
+            }
+        }
+        if state.hasGuide {
+            options.append(UIAction(title: "Program bitince") { _ in
+                Task { @MainActor in playback.setSleepTimer(.endOfProgram) }
+            })
+        }
+        if let endsAt = state.sleepEndsAt {
+            options.append(UIAction(title: "Kapat · \(ProgramText.clock(endsAt))", attributes: .destructive) { _ in
+                Task { @MainActor in playback.cancelSleepTimer() }
+            })
+        }
+        let title = state.sleepEndsAt.map { "Uyku zamanlayıcısı · \(ProgramText.clock($0))" } ?? "Uyku zamanlayıcısı"
+        return UIMenu(title: title, image: UIImage(systemName: state.sleepEndsAt == nil ? "moon" : "moon.fill"),
+                      children: options)
     }
 
     @MainActor
