@@ -51,7 +51,7 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
   geçilir; hepsi biterse liste yenilenip bir tur daha denenir. ATV, listedeki sorunlu CDN yerine
   atv.com.tr'nin token servisinden Apple TV'nin kendisi için alınan linkle oynar
 - **Kişiselleştirme:** izleme süresi kanal başına tutulur (iki haftada yarıya iner); en çok izlenen
-  kategoriler ve kanallar öne gelir, ana sayfada **En Çok İzlediklerin** rafı. Ayarlar'dan kapatılabilir
+  kategoriler ve kanallar öne gelir; ana sayfanın ilk satırı tüm kanallar bu sırayla, ardından Bu Akşam ve kategoriler. Ayarlar'dan kapatılabilir
 - Playlist'teki `#EXTVLCOPT` User-Agent / Referer header'larını yayına ekler
 - Liste 10 dakikadan eskiyse oynatmadan önce tazelenir. Yayın hata verirse liste yenilenip
   bir kez daha denenir (DMAX/TLC/Beyaz TV'nin süreli linkleri için)
