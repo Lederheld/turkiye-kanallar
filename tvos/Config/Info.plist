@@ -25,6 +25,10 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>CNN Türk yayını yerel ağdaki Mac'ten (live_resolver) alınır.</string>
+	<string>CNN Türk yayını yerel ağdaki Mac'ten alınır; iPhone'daki Canlı TV kumanda olarak bağlanır.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_canlitv._tcp</string>
+	</array>
 </dict>
 </plist>

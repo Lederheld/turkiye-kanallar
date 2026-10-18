@@ -141,3 +141,22 @@ final class TextTests: XCTestCase {
         XCTAssertEqual(GuideView.currentOrigin(now: date), ISO8601DateFormatter().date(from: "2026-10-18T09:30:00Z")!)
     }
 }
+
+final class RemoteProtocolTests: XCTestCase {
+    func testSignedRequestIsAcceptedOnlyWithSameKey() {
+        let request = RemoteRequest.signed(.play, channel: "ATV", key: "ortak-anahtar")
+        XCTAssertTrue(RemoteProtocol.isValid(request, key: "ortak-anahtar"))
+        XCTAssertFalse(RemoteProtocol.isValid(request, key: "baska-anahtar"))
+    }
+
+    func testTamperedRequestIsRejected() {
+        var request = RemoteRequest.signed(.play, channel: "ATV", key: "k")
+        request.channel = "Show TV"
+        XCTAssertFalse(RemoteProtocol.isValid(request, key: "k"))
+    }
+
+    func testOldRequestIsRejected() {
+        let request = RemoteRequest.signed(.zap, offset: 1, key: "k")
+        XCTAssertFalse(RemoteProtocol.isValid(request, key: "k", now: Date().addingTimeInterval(600)))
+    }
+}

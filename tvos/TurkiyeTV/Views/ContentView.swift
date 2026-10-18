@@ -54,6 +54,15 @@ struct ContentView: View {
         // Siri: "Canlı TV'de ATV'yi aç". Liste henüz yüklenmediyse yüklenince açılır
         .onChange(of: intents.requestedChannelName, initial: true) { _, _ in openRequestedChannel() }
         .onChange(of: store.channels.isEmpty) { _, _ in openRequestedChannel() }
+        // iPhone kumandası: önceki/sonraki kanal; oynatıcı kapalıysa son kanal açılır
+        .onChange(of: intents.zapRequest) { _, request in
+            guard let request else { return }
+            if let session, !session.isInPictureInPicture {
+                session.zap(by: request.offset)
+            } else if let channel = store.lastChannel ?? store.channels.first {
+                open(channel)
+            }
+        }
         // Bir TV gibi: açılışta (ayara göre) en çok ya da son izlenen kanal başlar
         .onChange(of: store.channels.isEmpty, initial: true) { _, isEmpty in
             guard !isEmpty, !didResume else { return }

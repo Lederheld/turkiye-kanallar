@@ -27,6 +27,7 @@ struct TurkiyeTVApp: App {
                 .environmentObject(reminders)
                 .preferredColorScheme(.dark)
                 .task {
+                    RemoteServer.shared.start()  // iPhone kumandası
                     // İmzalı linkler (ATV) hemen: kanal açılırken token beklenmesin
                     async let signed: Void = StreamSources.prefetchSignedLinks()
                     await store.reload()

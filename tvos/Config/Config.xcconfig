@@ -1,9 +1,12 @@
 // Ortak ayarlar. Kişisel değerler (gist adresi, Apple ekip kimliği) Secrets.xcconfig'e yazılır;
 // o dosya git'e girmez. Örnek: Secrets.example.xcconfig
 
-PRODUCT_BUNDLE_IDENTIFIER = com.example.turkiyetv
+APP_BUNDLE_ID = com.example.turkiyetv
 DEVELOPMENT_TEAM =
 PLAYLIST_URL =
 CODE_SIGN_ENTITLEMENTS = TurkiyeTV/TurkiyeTV.entitlements
 
 #include? "Secrets.xcconfig"
+
+// Apple TV uygulaması; iPhone kumandası bunun sonuna .remote ekler (Remote.xcconfig)
+PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_ID)

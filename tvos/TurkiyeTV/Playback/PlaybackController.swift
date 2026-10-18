@@ -92,6 +92,7 @@ final class PlaybackController: ObservableObject {
             autoRetryCount = 0
         }
         self.channel = channel
+        IntentRouter.shared.nowPlayingChannelName = channel.name
         failure = nil
         autoRetryTask?.cancel()
         autoRetryAt = nil
@@ -423,6 +424,9 @@ final class PlaybackController: ObservableObject {
     }
 
     func stop() {
+        if IntentRouter.shared.nowPlayingChannelName == channel.name {
+            IntentRouter.shared.nowPlayingChannelName = nil
+        }
         discardStandby()
         autoRetryTask?.cancel()
         scrubTask?.cancel()

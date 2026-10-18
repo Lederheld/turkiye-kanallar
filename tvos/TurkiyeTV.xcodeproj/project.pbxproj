@@ -11,6 +11,9 @@
 		7A1000000000000000000002 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 		7A1000000000000000000003 /* Secrets.example.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.example.xcconfig; sourceTree = "<group>"; };
 		7A1000000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		7A1000000000000000000006 /* CanliTVRemote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CanliTVRemote.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A1000000000000000000007 /* Remote.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Remote.xcconfig; sourceTree = "<group>"; };
+		7A1000000000000000000008 /* RemoteInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = RemoteInfo.plist; sourceTree = "<group>"; };
 		7A1000000000000000000005 /* TurkiyeTVTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TurkiyeTVTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -30,6 +33,16 @@
 			path = TurkiyeTV;
 			sourceTree = "<group>";
 		};
+		7A1000000000000000000013 /* CanliTVRemote */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CanliTVRemote;
+			sourceTree = "<group>";
+		};
+		7A1000000000000000000012 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		7A1000000000000000000011 /* TurkiyeTVTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = TurkiyeTVTests;
@@ -39,6 +52,13 @@
 
 /* Begin PBXFrameworksBuildPhase section */
 		7A1000000000000000000021 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1000000000000000000027 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -59,6 +79,8 @@
 			isa = PBXGroup;
 			children = (
 				7A1000000000000000000010 /* TurkiyeTV */,
+				7A1000000000000000000012 /* Shared */,
+				7A1000000000000000000013 /* CanliTVRemote */,
 				7A1000000000000000000011 /* TurkiyeTVTests */,
 				7A1000000000000000000032 /* Config */,
 				7A1000000000000000000031 /* Products */,
@@ -70,6 +92,7 @@
 			children = (
 				7A1000000000000000000001 /* TurkiyeTV.app */,
 				7A1000000000000000000005 /* TurkiyeTVTests.xctest */,
+				7A1000000000000000000006 /* CanliTVRemote.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -80,6 +103,8 @@
 				7A1000000000000000000002 /* Config.xcconfig */,
 				7A1000000000000000000003 /* Secrets.example.xcconfig */,
 				7A1000000000000000000004 /* Info.plist */,
+				7A1000000000000000000007 /* Remote.xcconfig */,
+				7A1000000000000000000008 /* RemoteInfo.plist */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -101,12 +126,36 @@
 			);
 			fileSystemSynchronizedGroups = (
 				7A1000000000000000000010 /* TurkiyeTV */,
+				7A1000000000000000000012 /* Shared */,
 			);
 			name = TurkiyeTV;
 			packageProductDependencies = (
 			);
 			productName = TurkiyeTV;
 			productReference = 7A1000000000000000000001 /* TurkiyeTV.app */;
+			productType = "com.apple.product-type.application";
+		};
+		7A1000000000000000000042 /* CanliTVRemote */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A1000000000000000000063 /* Build configuration list for PBXNativeTarget "CanliTVRemote" */;
+			buildPhases = (
+				7A1000000000000000000026 /* Sources */,
+				7A1000000000000000000027 /* Frameworks */,
+				7A1000000000000000000028 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7A1000000000000000000013 /* CanliTVRemote */,
+				7A1000000000000000000012 /* Shared */,
+			);
+			name = CanliTVRemote;
+			packageProductDependencies = (
+			);
+			productName = CanliTVRemote;
+			productReference = 7A1000000000000000000006 /* CanliTVRemote.app */;
 			productType = "com.apple.product-type.application";
 		};
 		7A1000000000000000000041 /* TurkiyeTVTests */ = {
@@ -145,6 +194,9 @@
 					7A1000000000000000000040 = {
 						CreatedOnToolsVersion = 16.0;
 					};
+					7A1000000000000000000042 = {
+						CreatedOnToolsVersion = 16.0;
+					};
 					7A1000000000000000000041 = {
 						CreatedOnToolsVersion = 16.0;
 						TestTargetID = 7A1000000000000000000040;
@@ -167,12 +219,20 @@
 			targets = (
 				7A1000000000000000000040 /* TurkiyeTV */,
 				7A1000000000000000000041 /* TurkiyeTVTests */,
+				7A1000000000000000000042 /* CanliTVRemote */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		7A1000000000000000000022 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1000000000000000000028 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -190,6 +250,13 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		7A1000000000000000000020 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1000000000000000000026 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -345,6 +412,62 @@
 			};
 			name = Release;
 		};
+		7A1000000000000000000076 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7A1000000000000000000007 /* Remote.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/RemoteInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Canlı TV";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		7A1000000000000000000077 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7A1000000000000000000007 /* Remote.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/RemoteInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Canlı TV";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -371,6 +494,15 @@
 			buildConfigurations = (
 				7A1000000000000000000074 /* Debug */,
 				7A1000000000000000000075 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A1000000000000000000063 /* Build configuration list for PBXNativeTarget "CanliTVRemote" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A1000000000000000000076 /* Debug */,
+				7A1000000000000000000077 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

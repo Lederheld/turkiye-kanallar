@@ -88,6 +88,23 @@ Adres derlemeye girmediyse uygulamadaki **Ayarlar** ekranından da girilebilir
   `python3 tvos/tools/make_icons.py tvos/TurkiyeTV/Assets.xcassets` çalıştırın.
 - Uygulama yalnızca kişisel kullanım içindir. Yayın hakları bize ait olmadığından App Store'a gönderilmez.
 
+## iPhone: Canlı TV kumandası
+
+`CanliTVRemote` hedefi; ortak model kodu (`Shared/`: liste, yayın akışı, hatırlatıcılar, iCloud, Siri) iki
+uygulamada da derlenir.
+
+- **Kanallar:** şu an yayındaki programlar ve ilerlemesi; kanala dokununca Apple TV'de açılır. Üstteki kartta
+  Apple TV'de oynayan kanal ve önceki/sonraki düğmeleri
+- **Bu Akşam / kanal akışı / Hatırlatmalar:** zile dokununca hatırlatıcı kurulur; Apple TV'dekilerle iCloud
+  üzerinden ortak. Program başlamadan 1 dk önce iPhone'da bildirim; dokununca kanal Apple TV'de açılır
+- **Siri (iPhone'da):** "Canlı TV'de ATV'yi aç" kanalı Apple TV'de açar
+- **Bağlantı:** ev ağında Bonjour (`_canlitv._tcp`), satır başına JSON. İstekler Apple TV'nin ürettiği ve yalnızca
+  iCloud anahtar-değer deposuyla paylaşılan anahtarla HMAC-SHA256 imzalı, 2 dk'dan eski istek reddedilir:
+  aynı ağdaki başka biri kanal değiştiremez. Apple TV'de Canlı TV açık olmalı (arka plandayken sistem
+  dinleyiciyi askıya alır)
+- Kurulum: `xcodebuild -scheme CanliTVRemote -destination 'id=<iPhone UDID>' -allowProvisioningUpdates`;
+  `Secrets.xcconfig`'teki `APP_BUNDLE_ID` iki uygulamada ortak (iPhone'un kimliği sonuna `.remote` alır)
+
 ## TLS denetimi
 
 Ekim 2026'da listedeki 43 kanalın master → varyant → segment zincirindeki 35 sunucu `nscurl --ats-diagnostics`
@@ -99,6 +116,6 @@ yönlendiricisi) düz http kalır. Yeni bir kaynak http ya da eski TLS kullanır
 ## Testler
 
 - Uygulama: `xcodebuild test -project TurkiyeTV.xcodeproj -scheme TurkiyeTV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'`
-  (M3U ayrıştırma, ad eşleme, hata sınıflandırma, iCloud birleştirme, Siri ad eşleme, süre metinleri)
+  (M3U ayrıştırma, ad eşleme, hata sınıflandırma, iCloud birleştirme, Siri ad eşleme, kumanda imzası, süre metinleri)
 - Pipeline: `python -m unittest discover -s tests` (kökte); GitHub'da her push'ta "Testler" iş akışı çalışır
 

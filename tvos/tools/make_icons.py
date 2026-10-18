@@ -1,6 +1,7 @@
 """tvOS 'App Icon & Top Shelf Image' brand assets üretir (3 katmanlı paralaks ikon).
 
 Kullanım: python3 tvos/tools/make_icons.py tvos/TurkiyeTV/Assets.xcassets   (Pillow gerekir)
+          python3 tvos/tools/make_icons.py --ios tvos/CanliTVRemote/Assets.xcassets   (iPhone kumandası)
 """
 import json
 import math
@@ -241,5 +242,22 @@ def main(catalog):
     imageset(brand, "Top Shelf Image Wide", (2320, 720))
 
 
+def ios_main(catalog):
+    """iPhone: aynı tasarım, katmanlar tek kare görselde (iOS köşeleri kendisi yuvarlar)."""
+    write_json(catalog, {"info": INFO})
+    layers = icon_layers(1024, 1024)
+    icon = layers["Back"].convert("RGBA")
+    for name in ("Middle", "Front"):
+        icon.alpha_composite(layers[name])
+    path = catalog / "AppIcon.appiconset"
+    path.mkdir(parents=True, exist_ok=True)
+    icon.convert("RGB").save(path / "icon-1024.png", optimize=True)
+    write_json(path, {"images": [{"filename": "icon-1024.png", "idiom": "universal", "platform": "ios",
+                                  "size": "1024x1024"}], "info": INFO})
+
+
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    if sys.argv[1] == "--ios":
+        ios_main(Path(sys.argv[2]))
+    else:
+        main(Path(sys.argv[1]))

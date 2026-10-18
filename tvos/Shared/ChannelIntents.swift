@@ -109,6 +109,15 @@ final class IntentRouter: ObservableObject {
     static let channelNamesKey = "intentChannelNames"
 
     @Published var requestedChannelName: String?
+    /// iPhone kumandasından önceki/sonraki kanal isteği (her istek yeni kimlikle, aynı yön tekrar edebilsin).
+    @Published var zapRequest: ZapRequest?
+    /// Apple TV'de şu an oynayan kanal; iPhone'a bildirilir.
+    @Published var nowPlayingChannelName: String?
+
+    struct ZapRequest: Equatable {
+        let offset: Int
+        let id = UUID()
+    }
 
     /// Kanal listesi değişince Siri'nin tanıdığı adlar güncellenir.
     static func publishChannelNames(_ names: [String]) {
