@@ -12,3 +12,4 @@ tvos/Config/Secrets.xcconfig
 xcuserdata/
 DerivedData/
 *.xcuserstate
+epg.json
