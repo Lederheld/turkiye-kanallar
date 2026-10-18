@@ -30,7 +30,10 @@ enum PlaylistError: LocalizedError {
 @MainActor
 final class PlaylistStore: ObservableObject {
     @Published private(set) var channels: [Channel] = [] {
-        didSet { numbers = Dictionary(channels.enumerated().map { ($1.name, $0 + 1) }, uniquingKeysWith: { a, _ in a }) }
+        didSet {
+            numbers = Dictionary(channels.enumerated().map { ($1.name, $0 + 1) }, uniquingKeysWith: { a, _ in a })
+            IntentRouter.publishChannelNames(channels.map(\.name))
+        }
     }
     @Published private(set) var isLoading = false
     @Published private(set) var lastUpdated: Date?
@@ -40,11 +43,11 @@ final class PlaylistStore: ObservableObject {
     @Published private(set) var recentNames: [String]
     /// Uygulama açılınca ne olacağı (bir TV gibi doğrudan bir kanalla açılabilir).
     @Published var startupBehavior: StartupBehavior {
-        didSet { defaults.set(startupBehavior.rawValue, forKey: Keys.startupBehavior) }
+        didSet { persist(startupBehavior.rawValue, Keys.startupBehavior) }
     }
     /// Kategoriler ve kanallar izleme süresine göre sıralanır (kanal numaraları değişmez).
     @Published var sortsByWatchTime: Bool {
-        didSet { defaults.set(sortsByWatchTime, forKey: Keys.sortsByWatchTime) }
+        didSet { persist(sortsByWatchTime, Keys.sortsByWatchTime) }
     }
     /// Kanal adı → [izleme puanı (sn), son güncelleme (1970'ten sn)]. Puan yarılanma süresiyle eskir.
     @Published private(set) var watchHistory: [String: [Double]]
@@ -86,6 +89,69 @@ final class PlaylistStore: ObservableObject {
         sortsByWatchTime = defaults.object(forKey: Keys.sortsByWatchTime) as? Bool ?? true
         watchHistory = defaults.dictionary(forKey: Keys.watchHistory) as? [String: [Double]] ?? [:]
         loadCachedPlaylist()
+        setUpCloudSync()
+    }
+
+    // MARK: - iCloud eşitleme
+
+    /// İlk açılışta yerel ile bulut birleştirilir; sonra her değişiklik iki yere de yazılır, başka
+    /// cihazdan gelen değişiklik burada uygulanır.
+    private func setUpCloudSync() {
+        let cloud = CloudSync.shared
+        if let remote = cloud.value(for: Keys.favorites) as? [String] {
+            favoriteNames = CloudSync.union(favoriteNames, remote)
+        }
+        if let remote = cloud.value(for: Keys.watchHistory) as? [String: [Double]] {
+            watchHistory = CloudSync.mergeHistory(watchHistory, remote)
+        }
+        if recentNames.isEmpty, let remote = cloud.value(for: Keys.recents) as? [String] {
+            recentNames = remote
+        }
+        if defaults.object(forKey: Keys.startupBehavior) == nil,
+           let remote = (cloud.value(for: Keys.startupBehavior) as? String).flatMap(StartupBehavior.init(rawValue:)) {
+            startupBehavior = remote
+        }
+        if defaults.object(forKey: Keys.sortsByWatchTime) == nil, let remote = cloud.value(for: Keys.sortsByWatchTime) as? Bool {
+            sortsByWatchTime = remote
+        }
+        persist(favoriteNames, Keys.favorites)
+        persist(watchHistory, Keys.watchHistory)
+        persist(recentNames, Keys.recents)
+
+        cloud.register(Keys.favorites) { [weak self] value in
+            guard let self, let names = value as? [String] else { return }
+            self.favoriteNames = names
+            self.defaults.set(names, forKey: Keys.favorites)
+        }
+        cloud.register(Keys.watchHistory) { [weak self] value in
+            guard let self, let remote = value as? [String: [Double]] else { return }
+            self.watchHistory = CloudSync.mergeHistory(self.watchHistory, remote)
+            self.defaults.set(self.watchHistory, forKey: Keys.watchHistory)
+        }
+        cloud.register(Keys.recents) { [weak self] value in
+            guard let self, let names = value as? [String] else { return }
+            self.recentNames = names
+            self.defaults.set(names, forKey: Keys.recents)
+        }
+        cloud.register(Keys.startupBehavior) { [weak self] value in
+            guard let self, let behavior = (value as? String).flatMap(StartupBehavior.init(rawValue:)),
+                  behavior != self.startupBehavior else { return }
+            self.startupBehavior = behavior
+        }
+        cloud.register(Keys.sortsByWatchTime) { [weak self] value in
+            guard let self, let sorts = value as? Bool, sorts != self.sortsByWatchTime else { return }
+            self.sortsByWatchTime = sorts
+        }
+    }
+
+    /// UserDefaults'a ve iCloud'a yazar (nil: siler).
+    private func persist(_ value: Any?, _ key: String) {
+        if let value {
+            defaults.set(value, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+        CloudSync.shared.push(value, for: key)
     }
 
     // MARK: - Adres
@@ -264,7 +330,7 @@ final class PlaylistStore: ObservableObject {
         } else {
             favoriteNames.append(channel.name)
         }
-        defaults.set(favoriteNames, forKey: Keys.favorites)
+        persist(favoriteNames, Keys.favorites)
     }
 
     // MARK: - Son izlenenler
@@ -297,12 +363,12 @@ final class PlaylistStore: ObservableObject {
         recentNames.removeAll { $0 == channel.name }
         recentNames.insert(channel.name, at: 0)
         recentNames = Array(recentNames.prefix(Self.recentLimit))
-        defaults.set(recentNames, forKey: Keys.recents)
+        persist(recentNames, Keys.recents)
     }
 
     func clearRecents() {
         recentNames = []
-        defaults.removeObject(forKey: Keys.recents)
+        persist(nil, Keys.recents)
     }
 
     // MARK: - İzleme süresi
@@ -317,12 +383,12 @@ final class PlaylistStore: ObservableObject {
         guard seconds > 0 else { return }
         let now = Date()
         watchHistory[channel.name] = [watchScore(of: channel, at: now) + seconds, now.timeIntervalSince1970]
-        defaults.set(watchHistory, forKey: Keys.watchHistory)
+        persist(watchHistory, Keys.watchHistory)
     }
 
     func clearWatchHistory() {
         watchHistory = [:]
-        defaults.removeObject(forKey: Keys.watchHistory)
+        persist(nil, Keys.watchHistory)
         clearRecents()
     }
 }

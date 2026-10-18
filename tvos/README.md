@@ -39,6 +39,11 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
 - **Köşede izleme ve ikili ekran:** çubuğun en sağındaki düğmeyle kanal köşeye alınır, ana sayfaya dönülür;
   başka kanal açılınca o tam ekranda, köşedeki oynamaya devam eder (ör. maç köşede, dizi tam ekranda).
   TV tuşu köşe seçeneklerini açar: Tam Ekran / Kapat / Taşı
+- **Siri:** uygulamanın adı "Canlı TV"; "Canlı TV'de ATV'yi aç", "Canlı TV'de Show TV aç", "Canlı TV'de TRT 1
+  kanalını aç" gibi. Apple kısayol cümlesinde uygulama adını şart koşuyor; kanal adları listeden otomatik gelir
+- **Profiller:** Apple TV'deki her kullanıcının favorileri, geçmişi, ayarları ve hatırlatıcıları ayrı
+- **iCloud eşitleme:** favoriler, son izlenenler, izleme süreleri, ayarlar ve hatırlatıcılar aynı Apple
+  hesabındaki cihazlar arasında eşitlenir
 - **Hız:** kanal, liste tazelenmesini beklemeden eldeki linkle açılır (liste arka planda yenilenir);
   logolar ve ATV'nin imzalı linki açılışta önceden alınır, logolar bellekte tutulur
 - **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →

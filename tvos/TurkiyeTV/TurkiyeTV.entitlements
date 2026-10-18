@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Apple TV profilleri: favoriler, geçmiş ve ayarlar her kullanıcıda ayrı -->
+	<key>com.apple.developer.user-management</key>
+	<array>
+		<string>runs-as-current-user-with-user-independent-keychain</string>
+	</array>
+	<!-- iCloud anahtar-değer deposu: favoriler, izleme geçmişi ve hatırlatıcılar aynı Apple hesabında eşitlenir -->
+	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
+</dict>
+</plist>

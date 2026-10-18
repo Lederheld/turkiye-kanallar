@@ -4,6 +4,7 @@ struct ContentView: View {
     @EnvironmentObject private var store: PlaylistStore
     @EnvironmentObject private var guide: ProgramGuide
     @EnvironmentObject private var reminders: ReminderStore
+    @ObservedObject private var intents = IntentRouter.shared
     @Environment(\.scenePhase) private var scenePhase
     /// Tam ekranda oynayan oturum.
     @State private var session: PlaybackController?
@@ -50,10 +51,14 @@ struct ContentView: View {
                 }
             }
         }
+        // Siri: "Canlı TV'de ATV'yi aç". Liste henüz yüklenmediyse yüklenince açılır
+        .onChange(of: intents.requestedChannelName, initial: true) { _, _ in openRequestedChannel() }
+        .onChange(of: store.channels.isEmpty) { _, _ in openRequestedChannel() }
         // Bir TV gibi: açılışta (ayara göre) en çok ya da son izlenen kanal başlar
         .onChange(of: store.channels.isEmpty, initial: true) { _, isEmpty in
             guard !isEmpty, !didResume else { return }
             didResume = true
+            if intents.requestedChannelName != nil { return }  // Siri'nin istediği kanal açılacak
             // Hatırlatılan program şu an yayındaysa açılışta o kanal gelir
             if let live = reminders.live, let channel = store.channel(named: live.channelName) {
                 open(channel)
@@ -91,6 +96,17 @@ struct ContentView: View {
             if session !== playback { playback.stop() }
         }
         session = playback
+    }
+
+    private func openRequestedChannel() {
+        guard let name = intents.requestedChannelName, let channel = store.channel(named: name) else { return }
+        intents.requestedChannelName = nil
+        didResume = true
+        if let session, !session.isInPictureInPicture {
+            session.play(channel)  // açık oynatıcıda kanal değişir
+        } else {
+            open(channel)
+        }
     }
 
     private var dueReminder: Reminder? {

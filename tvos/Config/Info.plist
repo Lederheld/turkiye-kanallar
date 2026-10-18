@@ -9,6 +9,14 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<!-- Siri eski adı da tanısın -->
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Türkiye TV</string>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Bazı yayınlar ve yerel ağdaki live_resolver (CNN Türk) düz http -->

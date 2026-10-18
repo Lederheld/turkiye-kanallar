@@ -38,6 +38,21 @@ final class ReminderStore: ObservableObject {
            let saved = try? JSONDecoder().decode([Reminder].self, from: data) {
             reminders = saved.filter { $0.end > Date() }
         }
+        // iCloud: diğer cihazlarda kurulan hatırlatıcılar da gelir
+        let cloud = CloudSync.shared
+        if let data = cloud.value(for: Self.defaultsKey) as? Data,
+           let remote = try? JSONDecoder().decode([Reminder].self, from: data) {
+            let known = Set(reminders.map(\.id))
+            reminders = (reminders + remote.filter { !known.contains($0.id) && $0.end > Date() })
+                .sorted { $0.start < $1.start }
+            save()
+        }
+        cloud.register(Self.defaultsKey) { [weak self] value in
+            guard let self, let data = value as? Data,
+                  let remote = try? JSONDecoder().decode([Reminder].self, from: data) else { return }
+            self.reminders = remote.filter { $0.end > Date() }.sorted { $0.start < $1.start }
+            self.defaults.set(data, forKey: Self.defaultsKey)
+        }
         checkTask = Task { [weak self] in
             while !Task.isCancelled {
                 self?.check()
@@ -95,6 +110,7 @@ final class ReminderStore: ObservableObject {
     private func save() {
         if let data = try? JSONEncoder().encode(reminders) {
             defaults.set(data, forKey: Self.defaultsKey)
+            CloudSync.shared.push(data, for: Self.defaultsKey)
         }
     }
 }

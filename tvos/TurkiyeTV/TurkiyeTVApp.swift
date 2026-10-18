@@ -3,11 +3,17 @@ import SwiftUI
 
 @main
 struct TurkiyeTVApp: App {
-    @StateObject private var store = PlaylistStore()
+    @StateObject private var store: PlaylistStore
     @StateObject private var guide = ProgramGuide()
-    @StateObject private var reminders = ReminderStore()
+    @StateObject private var reminders: ReminderStore
 
     init() {
+        // Profil desteğinden önceki veriler (bir kereye mahsus); mağazalar okumadan önce
+        if !LegacyMigration.exportIfRequested() {
+            LegacyMigration.importIfAvailable()
+        }
+        _store = StateObject(wrappedValue: PlaylistStore())
+        _reminders = StateObject(wrappedValue: ReminderStore())
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         // Kanal logoları her açılışta yeniden inmesin
         URLCache.shared = URLCache(memoryCapacity: 32 << 20, diskCapacity: 128 << 20)
