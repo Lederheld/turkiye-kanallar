@@ -187,7 +187,9 @@ final class ProgramGuide: ObservableObject {
     }
 
     nonisolated static func normalize(_ name: String) -> String {
+        // build_epg.py'deki normalize ile aynı: "İ"/"ı" → "i" ("Yıldız" → "yildiz")
         var text = name.replacingOccurrences(of: "İ", with: "I").lowercased(with: Locale(identifier: "tr_TR"))
+            .replacingOccurrences(of: "ı", with: "i")
         text = text.folding(options: .diacriticInsensitive, locale: Locale(identifier: "en_US"))
         if text.hasSuffix(".tr") { text.removeLast(3) }
         let words = text.split { !$0.isLetter && !$0.isNumber }.filter { $0 != "hd" }

@@ -17,11 +17,10 @@
 			<string>Türkiye TV</string>
 		</dict>
 	</array>
+	<!-- Tüm yayın sunucuları ATS'nin varsayılan şartlarını (TLS 1.2+, ileri gizlilik, SHA-256 sertifika)
+	     karşılıyor (tvos/README.md, "TLS denetimi"); tek istisna yerel ağdaki live_resolver (CNN Türk, düz http) -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- Bazı yayınlar ve yerel ağdaki live_resolver (CNN Türk) düz http -->
-		<key>NSAllowsArbitraryLoadsForMedia</key>
-		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>

@@ -87,3 +87,18 @@ Adres derlemeye girmediyse uygulamadaki **Ayarlar** ekranından da girilebilir
   Tasarımı değiştirmek için script'i düzenleyip
   `python3 tvos/tools/make_icons.py tvos/TurkiyeTV/Assets.xcassets` çalıştırın.
 - Uygulama yalnızca kişisel kullanım içindir. Yayın hakları bize ait olmadığından App Store'a gönderilmez.
+
+## TLS denetimi
+
+Ekim 2026'da listedeki 43 kanalın master → varyant → segment zincirindeki 35 sunucu `nscurl --ats-diagnostics`
+ile denendi: hepsi ATS'nin varsayılan şartlarını (TLS 1.2+, ileri gizlilik, SHA-256 sertifika) karşılıyor
+(mncdn kök adreste bağlantıyı kesiyor ama TLS 1.3 ve geçerli sertifika). Bu yüzden Info.plist'teki genel
+`NSAllowsArbitraryLoadsForMedia` muafiyeti kaldırıldı; yalnızca yerel ağ (`NSAllowsLocalNetworking`, CNN Türk
+yönlendiricisi) düz http kalır. Yeni bir kaynak http ya da eski TLS kullanırsa o kanal hata ekranına düşer.
+
+## Testler
+
+- Uygulama: `xcodebuild test -project TurkiyeTV.xcodeproj -scheme TurkiyeTV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'`
+  (M3U ayrıştırma, ad eşleme, hata sınıflandırma, iCloud birleştirme, Siri ad eşleme, süre metinleri)
+- Pipeline: `python -m unittest discover -s tests` (kökte); GitHub'da her push'ta "Testler" iş akışı çalışır
+

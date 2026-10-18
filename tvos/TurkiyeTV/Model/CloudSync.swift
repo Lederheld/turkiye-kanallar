@@ -48,12 +48,12 @@ final class CloudSync {
     // MARK: - Birleştirme
 
     /// Yerel sıra korunur, buluttaki eksikler sona eklenir.
-    static func union(_ local: [String], _ cloud: [String]) -> [String] {
+    nonisolated static func union(_ local: [String], _ cloud: [String]) -> [String] {
         local + cloud.filter { !local.contains($0) }
     }
 
     /// İzleme geçmişi: her kanal için son güncellenen kayıt kalır ([puan, zaman]).
-    static func mergeHistory(_ local: [String: [Double]], _ cloud: [String: [Double]]) -> [String: [Double]] {
+    nonisolated static func mergeHistory(_ local: [String: [Double]], _ cloud: [String: [Double]]) -> [String: [Double]] {
         local.merging(cloud) { mine, theirs in
             (theirs.count == 2 && mine.count == 2 && theirs[1] > mine[1]) ? theirs : mine
         }

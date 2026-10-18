@@ -48,7 +48,7 @@ enum StreamSources {
 
     /// Tek kaliteli link (…/atv/atv_1080p.m3u8) yerine yanındaki ana playlist (…/atv/atv.m3u8):
     /// oynatıcı takılan kaliteden diğerine geçebilir.
-    private static func adaptiveMaster(of url: URL) -> URL? {
+    static func adaptiveMaster(of url: URL) -> URL? {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
         let path = components.path
         guard let range = path.range(of: #"_\d{3,4}p\.m3u8$"#, options: .regularExpression) else { return nil }
