@@ -1,0 +1,32 @@
+# 3 saatte bir: yayın akışını kanallarımıza süzüp gist'e epg.json olarak yazar.
+# Uygulama ve ana ekran (Top Shelf) eklentisi yalnızca bu küçük dosyayı indirir.
+name: Update EPG
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"   # tam saat başlarından kaçınır
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gist-write            # diğer workflow'larla aynı anda gist'e yazmasın
+  cancel-in-progress: false
+
+jobs:
+  epg:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build and publish EPG
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+        run: python build_epg.py --publish --gist-id "$GIST_ID"
