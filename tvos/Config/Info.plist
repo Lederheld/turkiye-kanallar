@@ -4,6 +4,11 @@
 <dict>
 	<key>PlaylistURL</key>
 	<string>$(PLAYLIST_URL)</string>
+	<!-- Köşede izleme (Resim içinde Resim) uygulamadan çıkınca da sürsün -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Bazı yayınlar ve yerel ağdaki live_resolver (CNN Türk) düz http -->

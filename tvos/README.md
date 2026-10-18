@@ -36,6 +36,9 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
 - **Akıllı hata ekranı:** kanal açılmazsa nedeni söylenir (internet yok / erişim reddedildi / adres değişmiş /
   yanıt yok), 15-30-60 sn arayla kendiliğinden tekrar denenir, internet gidince bağlantı gelir gelmez açılır;
   altında aynı kategoriden en çok izlenen 4 kanal tek tıkla
+- **Köşede izleme ve ikili ekran:** çubuğun en sağındaki düğmeyle kanal köşeye alınır, ana sayfaya dönülür;
+  başka kanal açılınca o tam ekranda, köşedeki oynamaya devam eder (ör. maç köşede, dizi tam ekranda).
+  TV tuşu köşe seçeneklerini açar: Tam Ekran / Kapat / Taşı
 - **Hız:** kanal, liste tazelenmesini beklemeden eldeki linkle açılır (liste arka planda yenilenir);
   logolar ve ATV'nin imzalı linki açılışta önceden alınır, logolar bellekte tutulur
 - **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →

@@ -5,7 +5,10 @@ struct ContentView: View {
     @EnvironmentObject private var guide: ProgramGuide
     @EnvironmentObject private var reminders: ReminderStore
     @Environment(\.scenePhase) private var scenePhase
-    @State private var playingChannel: Channel?
+    /// Tam ekranda oynayan oturum.
+    @State private var session: PlaybackController?
+    /// Köşede (Resim içinde Resim) oynayan oturum: bu sırada başka kanal tam ekranda açılabilir (ikili ekran).
+    @State private var pictureInPictureSession: PlaybackController?
     @State private var didResume = false
 
     var body: some View {
@@ -22,17 +25,17 @@ struct ContentView: View {
                 .tabItem { Label("Ayarlar", systemImage: "gearshape") }
         }
         .background(AppBackground())
-        .environment(\.playChannel, PlayChannelAction { playingChannel = $0 })
-        .fullScreenCover(item: $playingChannel) { channel in
-            PlayerScreen(channel: channel, store: store, guide: guide, reminders: reminders)
+        .environment(\.playChannel, PlayChannelAction { open($0) })
+        .fullScreenCover(item: $session) { playback in
+            PlayerScreen(playback: playback, store: store, guide: guide, reminders: reminders)
         }
         // Oynatıcı kapalıyken (ana ekranda) hatırlatma: oynatıcıdaysa orada kart olarak çıkar
         .alert(dueReminder.map { "\($0.channelName) · \(ProgramText.clock($0.start))" } ?? "",
-               isPresented: Binding(get: { playingChannel == nil && dueReminder != nil },
+               isPresented: Binding(get: { session == nil && dueReminder != nil },
                                     set: { if !$0 { reminders.dismissDue() } }),
                presenting: dueReminder) { reminder in
             Button("İzle") {
-                playingChannel = store.channel(named: reminder.channelName)
+                if let channel = store.channel(named: reminder.channelName) { open(channel) }
                 reminders.dismissDue()
             }
             Button("Kapat", role: .cancel) { reminders.dismissDue() }
@@ -53,12 +56,41 @@ struct ContentView: View {
             didResume = true
             // Hatırlatılan program şu an yayındaysa açılışta o kanal gelir
             if let live = reminders.live, let channel = store.channel(named: live.channelName) {
-                playingChannel = channel
+                open(channel)
                 reminders.dismiss(live)
             } else if let channel = store.startupChannel {
-                playingChannel = channel
+                open(channel)
             }
         }
+    }
+
+    /// Kanalı tam ekranda açar. Köşedeki kanal seçilirse köşeden tam ekrana alınır.
+    private func open(_ channel: Channel) {
+        if let pip = pictureInPictureSession, pip.channel.name == channel.name {
+            session = pip
+            return
+        }
+        let playback = PlaybackController(channel: channel, store: store, guide: guide)
+        playback.onPictureInPictureStart = { [weak playback] in
+            // köşeye alınınca ana ekrana dönülür; başka kanal seçilirse o tam ekranda, bu köşede oynar
+            pictureInPictureSession = playback
+            if session === playback { session = nil }
+        }
+        playback.onPictureInPictureRestore = { [weak playback] completion in
+            guard let playback else { return completion(false) }
+            session = playback
+            Task {
+                try? await Task.sleep(for: .milliseconds(600))  // oynatıcı ekranı açılsın
+                completion(true)
+            }
+        }
+        playback.onPictureInPictureEnd = { [weak playback] in
+            guard let playback else { return }
+            if pictureInPictureSession === playback { pictureInPictureSession = nil }
+            // köşeden kapatıldıysa (tam ekrana dönmediyse) yayın durur
+            if session !== playback { playback.stop() }
+        }
+        session = playback
     }
 
     private var dueReminder: Reminder? {

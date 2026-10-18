@@ -18,16 +18,16 @@ struct PlayerScreen: View {
     @ObservedObject var store: PlaylistStore
     @ObservedObject var guide: ProgramGuide
     @ObservedObject var reminders: ReminderStore
-    @StateObject private var playback: PlaybackController
+    @ObservedObject var playback: PlaybackController
     @Environment(\.dismiss) private var dismiss
     @State private var showsBanner = false
     @State private var bannerTask: Task<Void, Never>?
 
-    init(channel: Channel, store: PlaylistStore, guide: ProgramGuide, reminders: ReminderStore) {
+    init(playback: PlaybackController, store: PlaylistStore, guide: ProgramGuide, reminders: ReminderStore) {
+        self.playback = playback
         self.store = store
         self.guide = guide
         self.reminders = reminders
-        _playback = StateObject(wrappedValue: PlaybackController(channel: channel, store: store, guide: guide))
     }
 
     var body: some View {
@@ -99,12 +99,15 @@ struct PlayerScreen: View {
                 }
             }
             .onAppear {
-                playback.retry()
+                playback.startIfNeeded()
                 showBanner()
             }
             .onDisappear {
                 bannerTask?.cancel()
-                playback.stop()
+                // köşede (Resim içinde Resim) sürüyorsa yayın kesilmez; ContentView kapanınca durdurur
+                if !playback.isInPictureInPicture {
+                    playback.stop()
+                }
             }
             .onChange(of: playback.channel.name) { _, name in
                 showBanner()
@@ -743,6 +746,28 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
             MainActor.assumeIsolated { playback.isTransportBarVisible = visible }
         }
 
+        // MARK: Resim içinde Resim (köşede izleme)
+
+        /// Oynatıcı ekranını AVKit değil ContentView kapatır (oturum durumu SwiftUI'da kalsın).
+        nonisolated func playerViewControllerShouldAutomaticallyDismissAtPictureInPictureStart(
+            _ playerViewController: AVPlayerViewController) -> Bool {
+            false
+        }
+
+        nonisolated func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
+            MainActor.assumeIsolated { playback.pictureInPictureWillStart(delegate: self) }
+        }
+
+        nonisolated func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
+            MainActor.assumeIsolated { playback.pictureInPictureDidStop() }
+        }
+
+        nonisolated func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
+            MainActor.assumeIsolated { playback.restoreFromPictureInPicture(completionHandler) }
+        }
+
         @objc private func trackTouch(_ recognizer: UILongPressGestureRecognizer) {
             guard let view = recognizer.view else { return }
             let location = recognizer.location(in: view)
@@ -806,12 +831,19 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
             gestureRecognizer === touchTracker || !(gestureRecognizer is UILongPressGestureRecognizer)
         }
 
+        /// Basılı tutarak sarma yalnızca odak oynatıcıdayken: çubuktaki düğmelerdeyken sol/sağ odağı gezdirir
+        /// (aksi halde AVKit'in tuş tanıyıcıları bizimkini beklerken kısa basışlar kayboluyordu).
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive press: UIPress) -> Bool {
+            guard gestureRecognizer is UILongPressGestureRecognizer, gestureRecognizer !== touchTracker else { return true }
+            return focusIsOnPlayer
+        }
+
         /// AVKit'in yalnızca sol/sağ tuş tanıyıcıları basılı tutmanın sonucunu bekler. Hepsini bekletmek
         /// (önceki hata) AVKit'in zaman çubuğunda kaydırarak sarmasını tamamen kilitliyordu.
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
             guard other.view !== gestureRecognizer.view, gestureRecognizer !== touchTracker else { return false }
-            if gestureRecognizer is UILongPressGestureRecognizer {
+            if gestureRecognizer is UILongPressGestureRecognizer && focusIsOnPlayer {
                 return other.allowedPressTypes.contains { Self.arrowPressTypes.contains($0.intValue) }
             }
             return false

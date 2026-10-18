@@ -27,6 +27,15 @@ final class PlaybackController: ObservableObject {
     /// Bu kadarından az gerideyken canlıda sayılır (oynatıcı canlının birkaç segment gerisinden oynar).
     private static let liveTolerance: TimeInterval = 15
 
+    /// Köşede (Resim içinde Resim) oynarken true: oynatıcı ekranı kapansa da yayın sürer.
+    @Published private(set) var isInPictureInPicture = false
+    /// Köşeye alınma / tam ekrana dönüş / köşeden kapanma; oturumları yöneten ContentView kurar.
+    var onPictureInPictureStart: (() -> Void)?
+    var onPictureInPictureRestore: ((@escaping (Bool) -> Void) -> Void)?
+    var onPictureInPictureEnd: (() -> Void)?
+    /// Köşedeyken oynatıcı ekranı kapanır; AVKit'in temsilcisi (Coordinator) o sırada burada tutulur.
+    var pictureInPictureDelegate: AnyObject?
+
     /// Anında kanal geçişinde hazır bekleyen oynatıcıyla değiştirilir (bkz. prepareStandby).
     @Published private(set) var player = AVPlayer()
 
@@ -170,6 +179,30 @@ final class PlaybackController: ObservableObject {
 
     func retry() {
         play(channel)
+    }
+
+    /// Oynatıcı ekranı açıldığında: köşeden tam ekrana dönülüyorsa yayın kesilmeden sürer.
+    func startIfNeeded() {
+        if player.currentItem == nil || failure != nil {
+            play(channel)
+        }
+    }
+
+    func pictureInPictureWillStart(delegate: AnyObject) {
+        isInPictureInPicture = true
+        pictureInPictureDelegate = delegate
+        onPictureInPictureStart?()
+    }
+
+    func pictureInPictureDidStop() {
+        isInPictureInPicture = false
+        pictureInPictureDelegate = nil
+        onPictureInPictureEnd?()
+    }
+
+    func restoreFromPictureInPicture(_ completion: @escaping (Bool) -> Void) {
+        guard let onPictureInPictureRestore else { return completion(false) }
+        onPictureInPictureRestore(completion)
     }
 
     /// Listede bir sonraki (+1) ya da önceki (-1) kanala geçer.
@@ -620,3 +653,5 @@ enum SwipeSpeed: String, CaseIterable, Identifiable {
         }
     }
 }
+
+extension PlaybackController: Identifiable {}
