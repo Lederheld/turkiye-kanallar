@@ -44,7 +44,7 @@ struct PlayerScreen: View {
                                                                 dueChannel: dueChannel?.name))
             .ignoresSafeArea()
             .overlay(alignment: .topLeading) {
-                if showsBanner && playback.errorMessage == nil {
+                if showsBanner && playback.failure == nil {
                     ChannelBanner(channel: playback.channel, number: store.number(of: playback.channel),
                                   program: guide.program(for: playback.channel, at: watchedDate),
                                   rewindWindow: playback.canRewind ? playback.rewindWindow : nil)
@@ -75,7 +75,7 @@ struct PlayerScreen: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if playback.isBehindLive && playback.errorMessage == nil {
+                if playback.isBehindLive && playback.failure == nil {
                     BehindLiveBadge(seconds: playback.behindLive)
                         .padding(.trailing, 80)
                         .padding(.top, 60)
@@ -94,8 +94,8 @@ struct PlayerScreen: View {
             }
             .animation(.smooth, value: reminders.due)
             .overlay {
-                if let message = playback.errorMessage {
-                    errorOverlay(message)
+                if let failure = playback.failure {
+                    errorOverlay(failure)
                 }
             }
             .onAppear {
@@ -166,22 +166,65 @@ struct PlayerScreen: View {
         }
     }
 
-    private func errorOverlay(_ message: String) -> some View {
-        VStack(spacing: 32) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(.yellow)
-            Text(message)
-                .font(.title3)
+    /// Açılamayan kanal: neden, kendiliğinden deneme sayacı ve tek tıkla geçilecek benzer kanallar.
+    private func errorOverlay(_ failure: PlaybackFailure) -> some View {
+        let channel = playback.channel
+        return VStack(spacing: 28) {
+            Image(systemName: failure.symbol)
+                .font(.system(size: 72))
+                .foregroundStyle(failure.kind == .offline ? .orange : .yellow)
+            Text(failure.title)
+                .font(.title2.weight(.bold))
+            Text(failure.explanation(for: channel))
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .frame(maxWidth: 1000)
+            if let retryAt = playback.autoRetryAt {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let seconds = max(0, Int(retryAt.timeIntervalSince(context.date).rounded(.up)))
+                    Text(seconds > 0 ? "\(seconds) sn sonra tekrar denenecek" : "Deneniyor…")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
             HStack(spacing: 40) {
-                Button("Tekrar dene") { playback.retry() }
-                Button("Sonraki kanal") { playback.zap(by: 1) }
-                Button("Kanallara dön") { dismiss() }
+                Button { playback.retry() } label: {
+                    Label("Tekrar dene", systemImage: "arrow.clockwise")
+                }
+                Button { dismiss() } label: {
+                    Label("Kanallara dön", systemImage: "square.grid.2x2")
+                }
+            }
+            let suggestions = suggestedChannels(instead: channel)
+            if failure.kind != .offline && !suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Bunun yerine")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 32) {
+                        ForEach(suggestions) { suggestion in
+                            Button { playback.play(suggestion) } label: {
+                                ChannelLogo(channel: suggestion, padding: 16)
+                                    .frame(width: 192, height: 108)
+                            }
+                            .buttonStyle(.card)
+                        }
+                    }
+                }
+                .padding(.top, 8)
             }
         }
         .padding(60)
         .glassSurface()
+    }
+
+    /// Aynı kategoriden, en çok izlenenler önde; yetmezse en çok izlenen diğer kanallar.
+    private func suggestedChannels(instead channel: Channel) -> [Channel] {
+        let others = store.ordered(store.channels).filter { $0.name != channel.name }
+        let sameCategory = others.filter { $0.category == channel.category }
+        let rest = others.filter { $0.category != channel.category }
+        return Array((sameCategory + rest).prefix(4))
     }
 }
 

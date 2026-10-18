@@ -33,6 +33,9 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
   tıklayınca açılır, değilse hatırlatıcı kurar. Kurulu hatırlatmalar ayrıca "Hatırlatmalar" rafında
 - **Rehber:** solda kanallar, sağda yarım saat öncesinden 12 saat sonrasına program ızgarası; satırlar birlikte
   kayar, şimdiki an kırmızı çizgi. Yayındaki programa basınca kanal açılır, ilerideki programa basınca hatırlatıcı
+- **Akıllı hata ekranı:** kanal açılmazsa nedeni söylenir (internet yok / erişim reddedildi / adres değişmiş /
+  yanıt yok), 15-30-60 sn arayla kendiliğinden tekrar denenir, internet gidince bağlantı gelir gelmez açılır;
+  altında aynı kategoriden en çok izlenen 4 kanal tek tıkla
 - **Hız:** kanal, liste tazelenmesini beklemeden eldeki linkle açılır (liste arka planda yenilenir);
   logolar ve ATV'nin imzalı linki açılışta önceden alınır, logolar bellekte tutulur
 - **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →

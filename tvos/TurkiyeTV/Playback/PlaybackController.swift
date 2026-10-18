@@ -5,7 +5,10 @@ import AVFoundation
 @MainActor
 final class PlaybackController: ObservableObject {
     @Published private(set) var channel: Channel
-    @Published private(set) var errorMessage: String?
+    /// Tüm kaynaklar denendi ve açılmadı; ekranda nedeni ve öneriler gösterilir.
+    @Published private(set) var failure: PlaybackFailure?
+    /// Hata ekranında kendiliğinden tekrar denenecek an (bağlantı yokken nil: bağlantı gelince denenir).
+    @Published private(set) var autoRetryAt: Date?
     /// Uyku zamanlayıcısının biteceği an; kapalıyken nil.
     @Published private(set) var sleepEndsAt: Date?
     /// Bitmeden bir dakika önce true: ekranda "Devam et" düğmesi çıkar.
@@ -34,6 +37,10 @@ final class PlaybackController: ObservableObject {
     private var statusObservation: NSKeyValueObservation?
     private var failureObserver: NSObjectProtocol?
     private var retriedAfterFailure = false
+    private var autoRetryTask: Task<Void, Never>?
+    /// Aynı kanalda art arda kendiliğinden deneme sayısı; aralık her seferinde uzar, sonra kullanıcıya kalır.
+    private var autoRetryCount = 0
+    private static let autoRetryDelays: [TimeInterval] = [15, 30, 60]
     private var startTask: Task<Void, Never>?
     private var healthTask: Task<Void, Never>?
     private var sources: [StreamSources.Source] = []
@@ -58,6 +65,7 @@ final class PlaybackController: ObservableObject {
         self.channel = channel
         self.store = store
         self.guide = guide
+        _ = NetworkMonitor.shared  // bağlantı durumu ilk hatadan önce bilinsin
         attachTimeObserver()
     }
 
@@ -72,9 +80,12 @@ final class PlaybackController: ObservableObject {
         if channel.name != self.channel.name {
             saveWatchTime()
             previousChannel = self.channel
+            autoRetryCount = 0
         }
         self.channel = channel
-        errorMessage = nil
+        failure = nil
+        autoRetryTask?.cancel()
+        autoRetryAt = nil
         retriedAfterFailure = false
         nowPlayingKey = nil
         rewindWindow = 0
@@ -380,6 +391,7 @@ final class PlaybackController: ObservableObject {
 
     func stop() {
         discardStandby()
+        autoRetryTask?.cancel()
         scrubTask?.cancel()
         swipeCommitTask?.cancel()
         saveWatchTime()
@@ -477,7 +489,8 @@ final class PlaybackController: ObservableObject {
         case .readyToPlay:
             guard isCurrentItem(itemID) else { return }
             retriedAfterFailure = false
-            errorMessage = nil
+            failure = nil
+            autoRetryCount = 0
             store.recordWatched(channel)
         case .failed:
             handleFailure(error, itemID: itemID)
@@ -497,13 +510,38 @@ final class PlaybackController: ObservableObject {
         }
         guard !retriedAfterFailure else {
             player.pause()
-            let detail = error.map { "\n\($0.localizedDescription)" } ?? ""
-            errorMessage = "\(channel.name) açılamadı.\(detail)"
+            let logComment = player.currentItem?.errorLog()?.events.last?.errorComment
+            failure = PlaybackFailure(error: error, logComment: logComment, isOnline: NetworkMonitor.shared.isOnline)
+            scheduleAutoRetry()
             return
         }
         // Tüm kaynaklar denendi; linklerin süresi dolmuş olabilir: liste ve imzalı linkler yenilenip bir tur daha
         retriedAfterFailure = true
         startFreshPlayback(forceReload: true)
+    }
+
+    /// Bağlantı yoksa gelince, varsa giderek uzayan aralıklarla kanal yeniden denenir.
+    private func scheduleAutoRetry() {
+        autoRetryTask?.cancel()
+        autoRetryAt = nil
+        if failure?.kind == .offline {
+            autoRetryTask = Task { [weak self] in
+                await NetworkMonitor.shared.waitUntilOnline()
+                try? await Task.sleep(for: .seconds(2))  // bağlantı oturunca
+                guard !Task.isCancelled, let self, self.failure != nil else { return }
+                self.retry()
+            }
+            return
+        }
+        guard autoRetryCount < Self.autoRetryDelays.count else { return }
+        let delay = Self.autoRetryDelays[autoRetryCount]
+        autoRetryCount += 1
+        autoRetryAt = Date().addingTimeInterval(delay)
+        autoRetryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, self.failure != nil else { return }
+            self.retry()
+        }
     }
 
     private func isCurrentItem(_ itemID: ObjectIdentifier) -> Bool {
