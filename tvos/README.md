@@ -31,6 +31,8 @@ Gist'teki `turkiye-kanallar.m3u` listesini Apple TV'de oynatan kişisel tvOS uyg
   ana ekrandaysan uyarı penceresi. Uygulama kapalıyken açılırsa yayındaki hatırlatılan kanal açılır
 - **Bu Akşam rafı:** ana sayfada 19:45–21:00 arası başlayan uzun yapımlar (dizi, film, maç); yayındaysa
   tıklayınca açılır, değilse hatırlatıcı kurar. Kurulu hatırlatmalar ayrıca "Hatırlatmalar" rafında
+- **Rehber:** solda kanallar, sağda yarım saat öncesinden 12 saat sonrasına program ızgarası; satırlar birlikte
+  kayar, şimdiki an kırmızı çizgi. Yayındaki programa basınca kanal açılır, ilerideki programa basınca hatırlatıcı
 - **Hız:** kanal, liste tazelenmesini beklemeden eldeki linkle açılır (liste arka planda yenilenir);
   logolar ve ATV'nin imzalı linki açılışta önceden alınır, logolar bellekte tutulur
 - **Kendini toparlayan oynatma:** her kanal için birkaç kaynak sırayla denenir (resmi imzalı link →

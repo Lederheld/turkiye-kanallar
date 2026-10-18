@@ -68,8 +68,13 @@ final class ReminderStore: ObservableObject {
     }
 
     func dismissDue() {
-        if let due { dismissed.insert(due.id) }
-        due = nil
+        if let due { dismiss(due) }
+    }
+
+    /// Bu hatırlatma için bir daha uyarılmaz (ör. açılışta kanalı zaten açıldı).
+    func dismiss(_ reminder: Reminder) {
+        dismissed.insert(reminder.id)
+        if due == reminder { due = nil }
     }
 
     private func check() {

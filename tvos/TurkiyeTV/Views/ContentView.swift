@@ -14,6 +14,8 @@ struct ContentView: View {
                 .tabItem { Label("Ana Sayfa", systemImage: "house") }
             BrowseView()
                 .tabItem { Label("Kanallar", systemImage: "square.grid.2x2") }
+            GuideView()
+                .tabItem { Label("Rehber", systemImage: "calendar") }
             SearchView()
                 .tabItem { Label("Ara", systemImage: "magnifyingglass") }
             SettingsView(store: store)
@@ -52,7 +54,7 @@ struct ContentView: View {
             // Hatırlatılan program şu an yayındaysa açılışta o kanal gelir
             if let live = reminders.live, let channel = store.channel(named: live.channelName) {
                 playingChannel = channel
-                reminders.dismissDue()
+                reminders.dismiss(live)
             } else if let channel = store.startupChannel {
                 playingChannel = channel
             }
