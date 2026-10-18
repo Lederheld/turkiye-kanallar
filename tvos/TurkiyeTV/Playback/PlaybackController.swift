@@ -22,6 +22,9 @@ final class PlaybackController: ObservableObject {
     @Published private(set) var player = AVPlayer()
 
     private let store: PlaylistStore
+    private let guide: ProgramGuide
+    /// Kontrol Merkezi / iPhone kumandasında gösterilen bilgi en son hangi program için kuruldu.
+    private var nowPlayingKey: String?
     private var statusObservation: NSKeyValueObservation?
     private var failureObserver: NSObjectProtocol?
     private var retriedAfterFailure = false
@@ -45,9 +48,10 @@ final class PlaybackController: ObservableObject {
     private static let scrubSteps: [TimeInterval] = [5, 10, 20, 30, 45, 60].map { $0 * 60 }
     private static let scrubStepInterval: Duration = .milliseconds(800)
 
-    init(channel: Channel, store: PlaylistStore) {
+    init(channel: Channel, store: PlaylistStore, guide: ProgramGuide) {
         self.channel = channel
         self.store = store
+        self.guide = guide
         attachTimeObserver()
     }
 
@@ -66,6 +70,7 @@ final class PlaybackController: ObservableObject {
         self.channel = channel
         errorMessage = nil
         retriedAfterFailure = false
+        nowPlayingKey = nil
         rewindWindow = 0
         behindLive = 0
         liveLatency = nil
@@ -282,6 +287,7 @@ final class PlaybackController: ObservableObject {
 
     /// Saniyede bir: izleme süresini sayar, geri sarma durumunu günceller.
     private func tick() {
+        updateNowPlayingIfNeeded()
         if player.rate > 0, player.currentItem?.status == .readyToPlay {
             unsavedWatchTime += 1
             if unsavedWatchTime >= Self.watchTimeSaveInterval { saveWatchTime() }
@@ -467,12 +473,32 @@ final class PlaybackController: ObservableObject {
         return AVURLAsset(url: source.url, options: options)
     }
 
-    private static func metadata(for channel: Channel) -> [AVMetadataItem] {
-        let title = AVMutableMetadataItem()
-        title.identifier = .commonIdentifierTitle
-        title.value = channel.name as NSString
-        title.extendedLanguageTag = "und"
-        return [title]
+    /// Oynatıcı başlığı, Kontrol Merkezi ve iPhone kumandası için: kanal adı ve o an izlenen program.
+    private static func metadata(for channel: Channel, program: TVProgram? = nil) -> [AVMetadataItem] {
+        func item(_ identifier: AVMetadataIdentifier, _ value: NSCopying & NSObjectProtocol) -> AVMutableMetadataItem {
+            let item = AVMutableMetadataItem()
+            item.identifier = identifier
+            item.value = value
+            item.extendedLanguageTag = "und"
+            return item
+        }
+        var items: [AVMetadataItem] = [item(.commonIdentifierTitle, channel.name as NSString)]
+        // Yalnızca başlık ve alt başlık: açıklama ya da kapak görseli eklenince AVKit panele bir "Bilgi"
+        // sekmesi ekliyor ve aşağı kaydırınca odak doğrudan kanallara inmiyor
+        if let program {
+            items.append(item(.iTunesMetadataTrackSubTitle, program.title as NSString))
+        }
+        return items
+    }
+
+    /// Program değiştikçe (ya da geri sarılınca) gösterilen bilgi güncellenir.
+    private func updateNowPlayingIfNeeded() {
+        guard let item = player.currentItem else { return }
+        let program = guide.program(for: channel, at: Date().addingTimeInterval(-behindLive))
+        let key = channel.name + "|" + (program?.title ?? "")
+        guard key != nowPlayingKey else { return }
+        nowPlayingKey = key
+        item.externalMetadata = Self.metadata(for: channel, program: program)
     }
 }
 

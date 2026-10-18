@@ -29,12 +29,12 @@ struct TurkiyeTVApp: App {
                     }
                     await LogoCache.shared.prefetch(store.channels.compactMap(\.logoURL))
                     _ = await signed
-                    await guide.refreshIfNeeded(for: store.channels)
+                    await guide.refreshIfNeeded(for: store.channels, summaryURL: store.epgSummaryURL)
                     // Açık kaldıkça liste ve akış kendiliğinden tazelenir; elle "Yenile" gerekmez
                     while !Task.isCancelled {
                         try? await Task.sleep(for: PlaylistStore.autoRefreshInterval)
                         await store.reloadIfStale()
-                        await guide.refreshIfNeeded(for: store.channels)
+                        await guide.refreshIfNeeded(for: store.channels, summaryURL: store.epgSummaryURL)
                     }
                 }
         }

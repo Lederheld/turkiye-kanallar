@@ -105,6 +105,11 @@ final class PlaylistStore: ObservableObject {
         return url
     }
 
+    /// Aynı gist'teki yayın akışı özeti (build_epg.py yazar).
+    var epgSummaryURL: URL? {
+        playlistURL?.deletingLastPathComponent().appendingPathComponent("epg.json")
+    }
+
     func setCustomPlaylistURL(_ value: String) async {
         customPlaylistURL = value.trimmingCharacters(in: .whitespacesAndNewlines)
         defaults.set(customPlaylistURL, forKey: Keys.customURL)

@@ -11,9 +11,9 @@ struct TVProgram: Codable, Hashable {
     }
 }
 
-/// Yayın akışı (XMLTV). Kanallar ada göre eşlenir; açılışta ve 6 saatte bir indirilir.
-/// Kaynaklar yalnızca bugünden ileriyi veriyor; dünü geri sarabilmek için önceki indirmeler
-/// önbellekte birleştirilir.
+/// Yayın akışı. Önce gist'teki hazır özet (epg.json: GitHub'da 3 saatte bir kanallarımıza süzülür,
+/// ~115 KB) indirilir; yoksa XMLTV kaynakları uygulamada eşlenir. Kaynaklar yalnızca bugünden ileriyi
+/// verdiği için dünü geri sarabilmek adına önceki indirmeler önbellekte birleştirilir.
 @MainActor
 final class ProgramGuide: ObservableObject {
     /// Bizim kanal adı → saate göre sıralı programlar.
@@ -26,7 +26,7 @@ final class ProgramGuide: ObservableObject {
     ]
     /// Akışta farklı adla geçen kanallar (normalize edilmiş ad → akıştaki ad).
     private static let aliases = ["now": "fox"]
-    private static let refreshInterval: TimeInterval = 6 * 3600
+    private static let refreshInterval: TimeInterval = 3 * 3600
     /// Bundan eski programlar atılır (24 saatlik geri sarma + pay).
     private static let retention: TimeInterval = 30 * 3600
     private static let requestTimeout: TimeInterval = 30
@@ -53,22 +53,26 @@ final class ProgramGuide: ObservableObject {
 
     // MARK: - İndirme
 
-    func refreshIfNeeded(for channels: [Channel]) async {
+    /// `summaryURL`: gist'teki epg.json (playlist ile aynı gist).
+    func refreshIfNeeded(for channels: [Channel], summaryURL: URL?) async {
         if let lastRefresh, Date().timeIntervalSince(lastRefresh) < Self.refreshInterval { return }
         if let refreshTask {
             await refreshTask.value
             return
         }
-        let task = Task { await refresh(for: channels) }
+        let task = Task { await refresh(for: channels, summaryURL: summaryURL) }
         refreshTask = task
         await task.value
         refreshTask = nil
     }
 
-    private func refresh(for channels: [Channel]) async {
+    private func refresh(for channels: [Channel], summaryURL: URL?) async {
         let names = channels.map(\.name)
         let previous = programsByChannel
-        let merged = await Task.detached(priority: .utility) {
+        let merged = await Task.detached(priority: .utility) { () async -> [String: [TVProgram]]? in
+            if let summaryURL, let summary = await Self.downloadSummary(summaryURL), !summary.isEmpty {
+                return Self.merge(previous: previous, fresh: summary)
+            }
             var fresh: [String: [TVProgram]] = [:]
             for source in Self.sources {
                 guard let guide = await Self.download(source) else { continue }
@@ -102,6 +106,46 @@ final class ProgramGuide: ObservableObject {
             result[name] = (kept + new).filter { $0.end > cutoff }
         }
         return result
+    }
+
+    // MARK: - Gist özeti
+
+    private struct Summary: Decodable {
+        let channels: [String: [[SummaryValue]]]
+    }
+
+    /// [başlangıç (unix sn), bitiş, "başlık"] dizisinin elemanları.
+    private enum SummaryValue: Decodable {
+        case number(Double)
+        case text(String)
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let number = try? container.decode(Double.self) {
+                self = .number(number)
+            } else {
+                self = .text(try container.decode(String.self))
+            }
+        }
+    }
+
+    private nonisolated static func downloadSummary(_ url: URL) async -> [String: [TVProgram]]? {
+        // Gist'in raw CDN önbelleğini atlamak için zaman damgası
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "t", value: String(Int(Date().timeIntervalSince1970)))]
+        let request = URLRequest(url: components?.url ?? url, cachePolicy: .reloadIgnoringLocalCacheData,
+                                 timeoutInterval: requestTimeout)
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let summary = try? JSONDecoder().decode(Summary.self, from: data) else { return nil }
+        return summary.channels.mapValues { rows in
+            rows.compactMap { row -> TVProgram? in
+                guard row.count == 3, case .number(let start) = row[0], case .number(let end) = row[1],
+                      case .text(let title) = row[2] else { return nil }
+                return TVProgram(title: title, start: Date(timeIntervalSince1970: start),
+                                 end: Date(timeIntervalSince1970: end))
+            }
+        }
     }
 
     // MARK: - XMLTV

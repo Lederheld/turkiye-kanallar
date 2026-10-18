@@ -25,7 +25,7 @@ struct PlayerScreen: View {
     init(channel: Channel, store: PlaylistStore, guide: ProgramGuide) {
         self.store = store
         self.guide = guide
-        _playback = StateObject(wrappedValue: PlaybackController(channel: channel, store: store))
+        _playback = StateObject(wrappedValue: PlaybackController(channel: channel, store: store, guide: guide))
     }
 
     var body: some View {
@@ -401,7 +401,7 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
     let guide: ProgramGuide
     let state: TransportState
 
-    private static let channelPanelHeight: CGFloat = 340
+    private static let channelPanelHeight: CGFloat = 430
 
     func makeCoordinator() -> Coordinator {
         Coordinator(playback: playback)
@@ -411,7 +411,7 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
         let controller = AVPlayerViewController()
         controller.player = playback.player
 
-        let channelPanel = UIHostingController(rootView: ChannelStripView(store: store, playback: playback))
+        let channelPanel = UIHostingController(rootView: ChannelStripView(store: store, guide: guide, playback: playback))
         channelPanel.title = "Kanallar"
         channelPanel.preferredContentSize = CGSize(width: 0, height: Self.channelPanelHeight)
 
@@ -656,10 +656,55 @@ private struct PlayerViewControllerRepresentable: UIViewControllerRepresentable 
     }
 }
 
+/// Kanal kartının altında o an yayındaki program: ad, ince ilerleme çubuğu ve kalan süre.
+/// Dakikada bir yenilenir.
+private struct NowPlayingLine: View {
+    let program: TVProgram?
+
+    var body: some View {
+        TimelineView(.everyMinute) { context in
+            VStack(alignment: .leading, spacing: 6) {
+                if let program {
+                    Text(program.title)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    let total = program.end.timeIntervalSince(program.start)
+                    let elapsed = context.date.timeIntervalSince(program.start)
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.white.opacity(0.2))
+                            Capsule().fill(Theme.accent)
+                                .frame(width: geometry.size.width * min(max(elapsed / max(total, 1), 0), 1))
+                        }
+                    }
+                    .frame(height: 4)
+                    Text(Self.remainingText(program.end.timeIntervalSince(context.date)))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Program bilgisi yok")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 78, alignment: .topLeading)
+        }
+    }
+
+    static func remainingText(_ seconds: TimeInterval) -> String {
+        let minutes = max(Int((seconds / 60).rounded(.up)), 0)
+        if minutes < 60 { return "Bitmesine \(minutes) dk" }
+        return minutes % 60 == 0 ? "Bitmesine \(minutes / 60) sa" : "Bitmesine \(minutes / 60) sa \(minutes % 60) dk"
+    }
+}
+
 /// Oynatıcı içindeki kanal şeridi: kanal numarası sırasında, açılınca odak izlenen kanalda olur
 /// ki sağa/sola gidince komşu kanallara geçilsin.
 private struct ChannelStripView: View {
     @ObservedObject var store: PlaylistStore
+    @ObservedObject var guide: ProgramGuide
     @ObservedObject var playback: PlaybackController
     @FocusState private var focusedName: String?
 
@@ -670,6 +715,7 @@ private struct ChannelStripView: View {
                 HStack(spacing: 40) {
                     ForEach(store.channels) { channel in
                         Button { playback.play(channel) } label: {
+                            VStack(spacing: 0) {
                             ChannelLogo(channel: channel, padding: 20)
                                 .frame(width: 256, height: 144)
                                 .overlay(alignment: .topLeading) {
@@ -694,6 +740,9 @@ private struct ChannelStripView: View {
                                             .padding(.bottom, 10)
                                     }
                                 }
+                            NowPlayingLine(program: guide.program(for: channel))
+                            }
+                            .frame(width: 256)
                         }
                         .buttonStyle(.card)
                         .focused($focusedName, equals: channel.name)

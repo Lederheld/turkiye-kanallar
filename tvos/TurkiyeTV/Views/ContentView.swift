@@ -27,7 +27,7 @@ struct ContentView: View {
             if phase == .active {
                 Task {
                     await store.reloadIfStale()
-                    await guide.refreshIfNeeded(for: store.channels)
+                    await guide.refreshIfNeeded(for: store.channels, summaryURL: store.epgSummaryURL)
                 }
             }
         }
